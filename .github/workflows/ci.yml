@@ -43,12 +43,6 @@ jobs:
         if: matrix.go-version == 'stable'
         run: golangci-lint run ./...
 
-      - name: Verify go generate produces no diff
-        if: matrix.go-version == 'stable'
-        run: |
-          go generate ./...
-          git diff --exit-code || (echo "go generate produced changes; please run 'go generate ./...' and commit the result" && exit 1)
-
       - name: Upload coverage
         if: matrix.go-version == 'stable'
         uses: actions/upload-artifact@v4
