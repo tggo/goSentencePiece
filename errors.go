@@ -9,6 +9,6 @@ var (
 	ErrInvalidModel = errors.New("sentencepiece: invalid model")
 
 	// ErrUnsupportedModel is returned when the model uses an unsupported
-	// model type (e.g., BPE instead of Unigram).
+	// model type (e.g., WORD or CHAR instead of Unigram/BPE).
 	ErrUnsupportedModel = errors.New("sentencepiece: unsupported model type")
 )

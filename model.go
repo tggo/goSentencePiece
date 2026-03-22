@@ -40,10 +40,21 @@ type Piece struct {
 	Type  PieceType
 }
 
+// ModelType represents the tokenization algorithm used by the model.
+type ModelType int32
+
+const (
+	// ModelTypeUnigram uses Viterbi decoding to find the optimal segmentation.
+	ModelTypeUnigram ModelType = 1
+	// ModelTypeBPE uses greedy byte-pair encoding merges.
+	ModelTypeBPE ModelType = 2
+)
+
 // Model holds the loaded SentencePiece model data, including the vocabulary,
 // piece index, normalizer configuration, and a byte trie for efficient prefix
-// matching during Viterbi tokenization.
+// matching during tokenization.
 type Model struct {
+	modelType    ModelType
 	pieces       []Piece
 	pieceIndex   map[string]int
 	unkID        int
@@ -93,14 +104,21 @@ func loadModelFromBytes(data []byte) (*Model, error) {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidModel, err)
 	}
 
-	// Only Unigram models (type == 1) are supported.
+	// Check model type — support Unigram and BPE.
+	modelType := ModelTypeUnigram
 	if ts := modelProto.TrainerSpec; ts != nil {
-		if mt := ts.GetModelType(); mt != pb.TrainerSpec_UNIGRAM {
-			return nil, fmt.Errorf("%w: got %v", ErrUnsupportedModel, mt)
+		switch ts.GetModelType() {
+		case pb.TrainerSpec_UNIGRAM:
+			modelType = ModelTypeUnigram
+		case pb.TrainerSpec_BPE:
+			modelType = ModelTypeBPE
+		default:
+			return nil, fmt.Errorf("%w: got %v", ErrUnsupportedModel, ts.GetModelType())
 		}
 	}
 
 	m := &Model{
+		modelType:  modelType,
 		pieces:     make([]Piece, len(modelProto.Pieces)),
 		pieceIndex: make(map[string]int, len(modelProto.Pieces)),
 	}
@@ -155,6 +173,16 @@ func loadModelFromBytes(data []byte) (*Model, error) {
 	}
 
 	return m, nil
+}
+
+// encode dispatches to the appropriate encoding algorithm based on model type.
+func (m *Model) encode(normalized string) []encodedPiece {
+	switch m.modelType {
+	case ModelTypeBPE:
+		return m.encodeBPE(normalized)
+	default:
+		return m.encodeUnigram(normalized)
+	}
 }
 
 // VocabSize returns the total number of pieces in the vocabulary, including

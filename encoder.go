@@ -5,8 +5,8 @@ import (
 )
 
 // Encoder handles the full encoding and decoding pipeline, combining
-// normalization and Unigram Viterbi tokenization. It is the core engine
-// used by Tokenizer.
+// normalization with either Unigram Viterbi or BPE merge tokenization.
+// It is the core engine used by Tokenizer.
 //
 // Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
@@ -31,7 +31,7 @@ func (e *Encoder) Encode(text string) []int {
 	}
 
 	normalized := e.normalizer.Normalize(text)
-	pieces := e.model.encodeUnigram(normalized)
+	pieces := e.mergeConsecutiveUnk(e.model.encode(normalized))
 
 	ids := make([]int, len(pieces))
 	for i, p := range pieces {
@@ -49,7 +49,7 @@ func (e *Encoder) EncodeAsPieces(text string) []string {
 	}
 
 	normalized := e.normalizer.Normalize(text)
-	pieces := e.model.encodeUnigram(normalized)
+	pieces := e.mergeConsecutiveUnk(e.model.encode(normalized))
 
 	result := make([]string, len(pieces))
 	for i, p := range pieces {
@@ -57,6 +57,27 @@ func (e *Encoder) EncodeAsPieces(text string) []string {
 	}
 
 	return result
+}
+
+// mergeConsecutiveUnk merges consecutive UNK pieces into a single piece.
+// This matches the C++ reference behavior (sentencepiece_processor.cc:609-625)
+// which merges "continuous run of unknown pieces" when byte_fallback is disabled.
+func (e *Encoder) mergeConsecutiveUnk(pieces []encodedPiece) []encodedPiece {
+	if e.model.byteFallback || len(pieces) == 0 {
+		return pieces
+	}
+
+	merged := make([]encodedPiece, 0, len(pieces))
+	for _, p := range pieces {
+		isUnk := p.id == e.model.unkID
+		if isUnk && len(merged) > 0 && merged[len(merged)-1].id == e.model.unkID {
+			// Merge with previous UNK.
+			merged[len(merged)-1].piece += p.piece
+		} else {
+			merged = append(merged, p)
+		}
+	}
+	return merged
 }
 
 // Decode converts a sequence of token IDs back to the original text string.

@@ -61,6 +61,7 @@ func main() {
 - **Pure Go** -- zero CGo, zero Rust FFI, zero external C libraries
 - **Byte-identical** to the reference C++ implementation (validated against 5155 golden test cases)
 - **Unigram model** with Viterbi decoding
+- **BPE model** with greedy best-first merging
 - **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
 - **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
 - **Batch encoding** -- encode multiple texts in a single call
@@ -126,15 +127,17 @@ func (m *Model) PadID() int
 
 ## Supported Models
 
-Any SentencePiece `.model` file that uses the **Unigram** model type. Tested with:
+Any SentencePiece `.model` file that uses **Unigram** or **BPE** model type.
 
-- `microsoft/deberta-v3-small`
-- `microsoft/deberta-v3-base`
-- `microsoft/deberta-v3-large`
+**Unigram** (tested):
+- `microsoft/deberta-v3-small` / `base` / `large`
+- Other Unigram models (XLNet, ALBERT, T5, etc.) should work
 
-Other Unigram models (XLNet, ALBERT, T5, etc.) should work but are not yet tested.
+**BPE** (tested):
+- `google/gemma-3-1b-it` (256K vocab)
+- Other BPE SentencePiece models (LLaMA, Mistral, etc.) should work
 
-**Note:** BPE models are not supported.
+**Note:** WORD and CHAR model types are not supported.
 
 ## Benchmarks
 
@@ -178,13 +181,14 @@ sentencepiece.go    -- public Tokenizer type and constructors
 model.go            -- protobuf loading, vocab index, ByteTrie
 normalizer.go       -- precompiled charsmap (Darts trie), NFKC, whitespace
 unigram.go          -- Viterbi decoding (forward DP + backtrack)
+bpe.go              -- BPE greedy merge with priority queue
 encoder.go          -- Encode/Decode with byte-token handling
 byte_fallback.go    -- <0xHH> token encoding/decoding
 errors.go           -- sentinel error types
 trie.go             -- ByteTrie (vocab), DartsDoubleArray (charsmap)
 proto/              -- generated protobuf code
 examples/           -- runnable example programs
-_testdata/          -- test model and golden test cases
+_testdata/          -- test models and golden test cases
 ```
 
 ## How It Works
