@@ -1,6 +1,7 @@
 // Package sentencepiece provides a pure Go implementation of the SentencePiece
-// Unigram tokenizer. It produces byte-identical output to the reference C++/Python
-// sentencepiece library without requiring CGo or external dependencies.
+// tokenizer, supporting both Unigram (Viterbi) and BPE model types. It produces
+// byte-identical output to the reference C++/Python sentencepiece library without
+// requiring CGo or external dependencies.
 package sentencepiece
 
 import "io"

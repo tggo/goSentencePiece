@@ -6,9 +6,9 @@
 [![Coverage](https://img.shields.io/badge/coverage-97.4%25-brightgreen)](https://github.com/tggo/goSentencePiece)
 [![Golden Tests](https://img.shields.io/badge/golden_tests-5155-brightgreen)](https://github.com/tggo/goSentencePiece)
 
-Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) Unigram tokenizer. Produces **byte-identical output** to the C++ / Python `sentencepiece` library -- no CGo, no Rust FFI, no external C libraries.
+Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) tokenizer (Unigram and BPE). Produces **byte-identical output** to the C++ / Python `sentencepiece` library -- no CGo, no Rust FFI, no external C libraries.
 
-Built for running DeBERTa v3 (and other Unigram-based models) in Go services.
+Built for running DeBERTa v3, Gemma, LLaMA, and other SentencePiece-based models in Go services.
 
 ## Installation
 
