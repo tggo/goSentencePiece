@@ -1,5 +1,7 @@
 package sentencepiece
 
+//go:generate protoc --go_out=. --go_opt=paths=source_relative proto/sentencepiece_model.proto
+
 import (
 	"fmt"
 	"io"
@@ -88,7 +90,14 @@ func LoadModelFromReader(r io.Reader) (*Model, error) {
 func loadModelFromBytes(data []byte) (*Model, error) {
 	var modelProto pb.ModelProto
 	if err := proto.Unmarshal(data, &modelProto); err != nil {
-		return nil, fmt.Errorf("unmarshal protobuf: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidModel, err)
+	}
+
+	// Only Unigram models (type == 1) are supported.
+	if ts := modelProto.TrainerSpec; ts != nil {
+		if mt := ts.GetModelType(); mt != pb.TrainerSpec_UNIGRAM {
+			return nil, fmt.Errorf("%w: got %v", ErrUnsupportedModel, mt)
+		}
 	}
 
 	m := &Model{
@@ -171,3 +180,15 @@ func (m *Model) PieceToId(piece string) int {
 	}
 	return m.unkID
 }
+
+// UnkID returns the vocabulary ID of the unknown token.
+func (m *Model) UnkID() int { return m.unkID }
+
+// BosID returns the vocabulary ID of the beginning-of-sentence token.
+func (m *Model) BosID() int { return m.bosID }
+
+// EosID returns the vocabulary ID of the end-of-sentence token.
+func (m *Model) EosID() int { return m.eosID }
+
+// PadID returns the vocabulary ID of the padding token (-1 if not set).
+func (m *Model) PadID() int { return m.padID }
