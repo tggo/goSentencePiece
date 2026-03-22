@@ -22,5 +22,5 @@ sources/
 # Fuzz corpus/cache
 testdata/fuzz/
 
-# SentencePiece model binary (large, download via make)
-_testdata/spm.model
+# Coverage output
+coverage.out

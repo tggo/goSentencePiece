@@ -51,10 +51,10 @@ type Model struct {
 	byteFallback bool
 
 	// Normalizer config from the model.
-	addDummyPrefix       bool
+	addDummyPrefix        bool
 	removeExtraWhitespace bool
-	escapeWhitespaces    bool
-	precompiledCharsmap  []byte
+	escapeWhitespaces     bool
+	precompiledCharsmap   []byte
 
 	// Byte-level trie for vocab prefix matching (matches reference traverse behavior).
 	vocabTrie *ByteTrie

@@ -26,122 +26,151 @@ func (m *Model) encodeUnigram(normalized string) []encodedPiece {
 		return nil
 	}
 
+	dp := m.viterbiForward(normalized)
+	return m.viterbiBacktrack(normalized, dp)
+}
+
+// viterbiForward runs the forward Viterbi DP pass over the normalized string,
+// returning the best-path DP array indexed by byte position.
+func (m *Model) viterbiForward(normalized string) []bestPathNode {
 	size := len(normalized)
 	unkScore := m.minScore() - unkPenalty
 
-	// DP array indexed by byte position.
-	bestPathEndsAt := make([]bestPathNode, size+1)
-	for i := range bestPathEndsAt {
-		bestPathEndsAt[i].id = -1
+	dp := make([]bestPathNode, size+1)
+	for i := range dp {
+		dp[i].id = -1
 	}
 
-	// Forward Viterbi pass.
 	startsAt := 0
 	for startsAt < size {
-		bestScoreHere := bestPathEndsAt[startsAt].bestPathScore
+		bestScoreHere := dp[startsAt].bestPathScore
+		mblen := m.charLen(normalized, startsAt, size)
 
-		// Length of one UTF-8 character at this position.
-		_, mblen := utf8.DecodeRuneInString(normalized[startsAt:])
-		if mblen == 0 {
-			mblen = 1
-		}
-		if startsAt+mblen > size {
-			mblen = size - startsAt
-		}
+		hasSingleNode := m.trieSearch(normalized, startsAt, size, mblen, bestScoreHere, dp)
 
-		hasSingleNode := false
-
-		// Traverse trie byte-by-byte, exactly like the reference.
-		node := m.vocabTrie
-		keyPos := startsAt
-
-		for keyPos < size {
-			// Traverse one byte.
-			var ret int
-			node, ret = node.Traverse(normalized[keyPos])
-			keyPos++
-
-			if ret == -2 {
-				break // No transition.
-			}
-			if ret >= 0 {
-				// Found a piece.
-				if m.pieces[ret].Type == PieceUnused {
-					continue
-				}
-
-				length := keyPos - startsAt
-
-				var score float32
-				if m.pieces[ret].Type == PieceUserDefined {
-					score = float32(length)*m.maxScoreVal - 0.1
-				} else {
-					score = m.pieces[ret].Score
-				}
-
-				candidateScore := score + bestScoreHere
-				target := &bestPathEndsAt[keyPos]
-
-				if target.id == -1 || candidateScore > target.bestPathScore {
-					target.bestPathScore = candidateScore
-					target.startsAt = startsAt
-					target.id = ret
-				}
-
-				if !hasSingleNode && length == mblen {
-					hasSingleNode = true
-				}
-			}
-		}
-
-		// UNK / byte fallback for characters with no single-char piece.
 		if !hasSingleNode {
-			endPos := startsAt + mblen
-			if endPos <= size {
-				if m.byteFallback {
-					m.insertByteFallback(normalized, startsAt, endPos, bestScoreHere, bestPathEndsAt)
-				} else {
-					candidateScore := unkScore + bestScoreHere
-					target := &bestPathEndsAt[endPos]
-					if target.id == -1 || candidateScore > target.bestPathScore {
-						target.bestPathScore = candidateScore
-						target.startsAt = startsAt
-						target.id = m.unkID
-					}
-				}
-			}
+			m.handleFallback(normalized, startsAt, mblen, size, unkScore, bestScoreHere, dp)
 		}
 
 		startsAt += mblen
 	}
 
-	// Backtrack.
-	if bestPathEndsAt[size].id == -1 {
+	return dp
+}
+
+// charLen returns the UTF-8 byte length of the character at position pos,
+// clamped to the remaining input size.
+func (m *Model) charLen(normalized string, pos, size int) int {
+	_, mblen := utf8.DecodeRuneInString(normalized[pos:])
+	if mblen == 0 {
+		mblen = 1
+	}
+	if pos+mblen > size {
+		mblen = size - pos
+	}
+	return mblen
+}
+
+// trieSearch traverses the vocab trie byte-by-byte from startsAt, updating
+// the DP array for each matching piece. Returns true if any match covers
+// exactly one Unicode character (hasSingleNode).
+func (m *Model) trieSearch(normalized string, startsAt, size, mblen int, bestScoreHere float32, dp []bestPathNode) bool {
+	hasSingleNode := false
+	node := m.vocabTrie
+	keyPos := startsAt
+
+	for keyPos < size {
+		var ret int
+		node, ret = node.Traverse(normalized[keyPos])
+		keyPos++
+
+		if ret == -2 {
+			break
+		}
+		if ret < 0 || m.pieces[ret].Type == PieceUnused {
+			continue
+		}
+
+		length := keyPos - startsAt
+		score := m.pieceScore(ret, length)
+		candidateScore := score + bestScoreHere
+		target := &dp[keyPos]
+
+		if target.id == -1 || candidateScore > target.bestPathScore {
+			target.bestPathScore = candidateScore
+			target.startsAt = startsAt
+			target.id = ret
+		}
+
+		if !hasSingleNode && length == mblen {
+			hasSingleNode = true
+		}
+	}
+
+	return hasSingleNode
+}
+
+// pieceScore returns the score for a piece, with user-defined pieces receiving
+// a bonus proportional to their length.
+func (m *Model) pieceScore(pieceID, length int) float32 {
+	if m.pieces[pieceID].Type == PieceUserDefined {
+		return float32(length)*m.maxScoreVal - 0.1
+	}
+	return m.pieces[pieceID].Score
+}
+
+// handleFallback handles the case where no vocab piece covers a single
+// Unicode character at the current position — either via byte fallback
+// or UNK token.
+func (m *Model) handleFallback(normalized string, startsAt, mblen, size int, unkScore, bestScoreHere float32, dp []bestPathNode) {
+	endPos := startsAt + mblen
+	if endPos > size {
+		return
+	}
+
+	if m.byteFallback {
+		m.insertByteFallback(normalized, startsAt, endPos, bestScoreHere, dp)
+	} else {
+		candidateScore := unkScore + bestScoreHere
+		target := &dp[endPos]
+		if target.id == -1 || candidateScore > target.bestPathScore {
+			target.bestPathScore = candidateScore
+			target.startsAt = startsAt
+			target.id = m.unkID
+		}
+	}
+}
+
+// viterbiBacktrack recovers the optimal segmentation by walking backwards
+// through the DP array.
+func (m *Model) viterbiBacktrack(normalized string, dp []bestPathNode) []encodedPiece {
+	size := len(normalized)
+	if dp[size].id == -1 {
 		return []encodedPiece{{id: m.unkID, piece: normalized}}
 	}
 
 	var result []encodedPiece
 	endsAt := size
 	for endsAt > 0 {
-		node := bestPathEndsAt[endsAt]
+		node := dp[endsAt]
 		startPos := node.startsAt
 		pieceID := node.id
 
 		if m.byteFallback && m.pieces[pieceID].Type == PieceByte {
+			// Emit byte tokens in reverse (will be reversed later).
 			for i := endsAt - 1; i >= startPos; i-- {
 				byteToken := byteToPiece(normalized[i])
 				byteID := m.PieceToId(byteToken)
 				result = append(result, encodedPiece{id: byteID, piece: byteToken})
 			}
 		} else {
-			pieceStr := normalized[startPos:endsAt]
-			result = append(result, encodedPiece{id: pieceID, piece: pieceStr})
+			result = append(result, encodedPiece{id: pieceID, piece: normalized[startPos:endsAt]})
 		}
 
 		endsAt = startPos
 	}
 
-	// Reverse.
+	// Reverse to get forward order.
 	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 		result[i], result[j] = result[j], result[i]
 	}
