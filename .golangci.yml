@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - staticcheck
+    - ineffassign
+    - misspell
+    - gocyclo
+    - errcheck
+    - gosimple
+    - unused
+  disable:
+    - depguard
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+
+issues:
+  exclude-dirs:
+    - proto

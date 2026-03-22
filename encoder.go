@@ -7,6 +7,8 @@ import (
 // Encoder handles the full encoding and decoding pipeline, combining
 // normalization and Unigram Viterbi tokenization. It is the core engine
 // used by Tokenizer.
+//
+// Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
 	model      *Model
 	normalizer *Normalizer

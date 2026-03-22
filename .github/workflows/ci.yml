@@ -33,13 +33,21 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Install staticcheck
+      - name: Install golangci-lint
         if: matrix.go-version == 'stable'
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-      - name: Staticcheck
+      - name: Lint
         if: matrix.go-version == 'stable'
-        run: staticcheck ./...
+        run: golangci-lint run ./...
+
+      - name: Verify go generate produces no diff
+        if: matrix.go-version == 'stable'
+        run: |
+          go generate ./...
+          git diff --exit-code || (echo "go generate produced changes; please run 'go generate ./...' and commit the result" && exit 1)
 
       - name: Upload coverage
         if: matrix.go-version == 'stable'

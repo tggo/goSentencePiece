@@ -4,6 +4,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/tggo/goSentencePiece.svg)](https://pkg.go.dev/github.com/tggo/goSentencePiece)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tggo/goSentencePiece)](https://goreportcard.com/report/github.com/tggo/goSentencePiece)
 [![Coverage](https://img.shields.io/badge/coverage-97.4%25-brightgreen)](https://github.com/tggo/goSentencePiece)
+[![Golden Tests](https://img.shields.io/badge/golden_tests-5155-brightgreen)](https://github.com/tggo/goSentencePiece)
 
 Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) Unigram tokenizer. Produces **byte-identical output** to the C++ / Python `sentencepiece` library -- no CGo, no Rust FFI, no external C libraries.
 
@@ -62,6 +63,9 @@ func main() {
 - **Unigram model** with Viterbi decoding
 - **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
 - **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
+- **Batch encoding** -- encode multiple texts in a single call
+- **go:embed support** -- load models from embedded files with `NewTokenizerFromReader`
+- **Typed errors** -- sentinel errors for invalid or unsupported models
 - **io.Reader support** -- load models from embedded files, HTTP responses, or any reader
 - **Fast** -- see benchmarks below
 - Zero runtime dependencies beyond stdlib + `google.golang.org/protobuf`
@@ -86,11 +90,17 @@ func (t *Tokenizer) EncodeAsPieces(text string) ([]string, error)
 // Decode token IDs back to text
 func (t *Tokenizer) Decode(ids []int) (string, error)
 
+// Encode multiple texts at once
+func (t *Tokenizer) EncodeBatch(texts []string) ([][]int, error)
+
 // Wrap with BOS/EOS tokens
 func (t *Tokenizer) AddSpecialTokens(ids []int) []int
 
 // Get vocabulary size
 func (t *Tokenizer) VocabSize() int
+
+// Access the underlying model
+func (t *Tokenizer) Model() *Model
 ```
 
 ### Model
@@ -106,6 +116,12 @@ func LoadModelFromReader(r io.Reader) (*Model, error)
 func (m *Model) VocabSize() int
 func (m *Model) IdToPiece(id int) string
 func (m *Model) PieceToId(piece string) int
+
+// Special token IDs
+func (m *Model) UnkID() int
+func (m *Model) BosID() int
+func (m *Model) EosID() int
+func (m *Model) PadID() int
 ```
 
 ## Supported Models
@@ -165,6 +181,10 @@ _testdata/          -- test model and golden test cases
 3. **Byte fallback**: Characters not covered by any vocabulary piece are encoded as individual UTF-8 bytes using `<0xHH>` tokens.
 
 4. **Decoding**: Token IDs are mapped back to piece strings. Byte tokens are accumulated and flushed as UTF-8. The metaspace prefix is converted back to spaces.
+
+## Thread Safety
+
+`Tokenizer` is safe for concurrent use by multiple goroutines after creation. The model and normalizer are read-only after initialization, so no locking is needed.
 
 ## Running Tests
 

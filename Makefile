@@ -7,7 +7,7 @@ GOLDEN := _testdata/golden/test_cases.jsonl
 PROTO_SRC := proto/sentencepiece_model.proto
 PROTO_GO := proto/sentencepiece_model.pb.go
 
-.PHONY: all venv deps golden proto test bench fuzz lint cover ci clean
+.PHONY: all venv deps golden proto test bench fuzz lint cover ci clean generate
 
 all: venv deps golden proto test
 
@@ -52,9 +52,7 @@ fuzz:
 
 # ── Lint / Coverage / CI ────────────────────────────────────
 lint:
-	go vet ./...
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	staticcheck ./...
+	@which golangci-lint > /dev/null 2>&1 && golangci-lint run ./... || (echo "golangci-lint not found, falling back to go vet + staticcheck"; go vet ./...; go install honnef.co/go/tools/cmd/staticcheck@latest; staticcheck ./...)
 
 cover:
 	go test -coverprofile=coverage.out ./...
@@ -62,6 +60,10 @@ cover:
 
 ci: test lint
 	go build ./...
+
+# ── Generate ─────────────────────────────────────────────────
+generate:
+	go generate ./...
 
 # ── Cleanup ──────────────────────────────────────────────────
 clean:

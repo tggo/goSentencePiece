@@ -8,6 +8,8 @@ import "io"
 // Tokenizer is the top-level SentencePiece tokenizer. It wraps a loaded model
 // and encoder, providing methods for encoding text to token IDs, decoding IDs
 // back to text, and managing special tokens (BOS/EOS).
+//
+// Tokenizer is safe for concurrent use by multiple goroutines after creation.
 type Tokenizer struct {
 	model   *Model
 	encoder *Encoder
@@ -74,4 +76,25 @@ func (t *Tokenizer) AddSpecialTokens(ids []int) []int {
 // VocabSize returns the total number of pieces in the model's vocabulary.
 func (t *Tokenizer) VocabSize() int {
 	return t.model.VocabSize()
+}
+
+// Model returns the underlying loaded Model, providing access to vocabulary
+// metadata such as piece lookup, vocab size, and special token IDs.
+func (t *Tokenizer) Model() *Model {
+	return t.model
+}
+
+// EncodeBatch tokenizes multiple input strings in a single call, returning
+// a slice of token ID slices. This is a convenience method equivalent to
+// calling Encode on each input individually.
+func (t *Tokenizer) EncodeBatch(texts []string) ([][]int, error) {
+	results := make([][]int, len(texts))
+	for i, text := range texts {
+		ids, err := t.Encode(text)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = ids
+	}
+	return results, nil
 }
