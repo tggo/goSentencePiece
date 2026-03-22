@@ -198,7 +198,7 @@ The [examples/](examples/) directory contains runnable programs:
 |---------|-------------|
 | `basic` | Encode, decode, batch encode, vocab metadata |
 | `embed` | Load model from `go:embed` binary data |
-| `mmbert` | mmBERT-small ONNX inference prep with full pipeline |
+| `mmbert` | mmBERT-small ONNX inference prep (tokenizer.json or .model) |
 | `similarity` | Jaccard similarity between two texts at token level |
 | `streaming` | Memory-efficient line-by-line tokenization from stdin |
 | `vocab-inspect` | Inspect vocab: special tokens, byte tokens, piece search |
@@ -207,7 +207,8 @@ The [examples/](examples/) directory contains runnable programs:
 
 ```bash
 go run ./examples/basic _testdata/spm.model
-go run ./examples/mmbert _testdata/bpe.model
+go run ./examples/mmbert _testdata/tokenizer.json   # HuggingFace format
+go run ./examples/mmbert _testdata/bpe.model         # SentencePiece format
 go run ./examples/compare _testdata/spm.model _testdata/bpe.model
 go run ./examples/vocab-inspect _testdata/spm.model
 cat file.txt | go run ./examples/benchmark _testdata/spm.model

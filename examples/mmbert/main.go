@@ -1,19 +1,17 @@
-// Preparing inputs for mmBERT-small (jhu-clsp/mmBERT-small) ONNX inference
-// using the Gemma tokenizer.
+// Preparing inputs for mmBERT-small (jhu-clsp/mmBERT-small) ONNX inference.
 //
-// mmBERT-small is a ModernBERT-based multilingual encoder that uses the
-// Gemma tokenizer (256K vocab, BPE). This example shows how to:
+// mmBERT-small is a ModernBERT-based multilingual encoder. This example shows
+// how to:
 //
-//  1. Load the SentencePiece tokenizer model
+//  1. Load the tokenizer (from tokenizer.json or SentencePiece .model)
 //  2. Configure the pipeline (post-processing, truncation, padding)
 //  3. Tokenize text into ONNX-ready tensors (input_ids, attention_mask, token_type_ids)
 //
-// The tokenizer model is the Gemma SentencePiece model. Download it from:
+// Usage with HuggingFace tokenizer.json (recommended):
 //
-//	# Requires HuggingFace auth (Gemma license agreement)
-//	huggingface-cli download google/gemma-3-1b-it tokenizer.model --local-dir tmp
+//	go run ./examples/mmbert _testdata/tokenizer.json
 //
-// Or use the test model shipped with goSentencePiece:
+// Usage with SentencePiece .model (Gemma tokenizer):
 //
 //	go run ./examples/mmbert _testdata/bpe.model
 package main
@@ -30,15 +28,14 @@ const maxLen = 32
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s <tokenizer.model>\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Download the Gemma tokenizer model:\n")
-		fmt.Fprintf(os.Stderr, "  huggingface-cli download google/gemma-3-1b-it tokenizer.model --local-dir tmp\n\n")
-		fmt.Fprintf(os.Stderr, "Or use the test model:\n")
+		fmt.Fprintf(os.Stderr, "usage: %s <tokenizer.json | model.model>\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  go run ./examples/mmbert _testdata/tokenizer.json\n")
 		fmt.Fprintf(os.Stderr, "  go run ./examples/mmbert _testdata/bpe.model\n")
 		os.Exit(1)
 	}
 
-	// ── Step 1: Load tokenizer ─────────────────────────────────────
+	// ── Step 1: Load tokenizer (auto-detects format) ──────────────
 	tok, err := sp.NewTokenizer(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
@@ -46,13 +43,13 @@ func main() {
 
 	m := tok.Model()
 
-	// Resolve pad ID: Gemma has pad_id=-1 (not set), mmBERT uses 0 (<pad>).
+	// Resolve pad ID: Gemma .model has pad_id=-1, mmBERT uses 0 (<pad>).
 	padID := m.PadID()
 	if padID < 0 {
 		padID = m.PieceToId("<pad>")
 	}
 
-	fmt.Println("=== mmBERT-small tokenizer (Gemma) ===")
+	fmt.Println("=== mmBERT-small tokenizer ===")
 	fmt.Printf("Vocab: %d | BOS(CLS): %d | EOS(SEP): %d | PAD: %d\n\n",
 		tok.VocabSize(), m.BosID(), m.EosID(), padID)
 
@@ -109,5 +106,5 @@ func main() {
 	//       "attention_mask": ort.NewTensor(enc.AttentionMask),
 	//       "token_type_ids": ort.NewTensor(enc.TypeIDs),
 	//   })
-	fmt.Println("✓ All tensors ready for ONNX Runtime inference")
+	fmt.Println("Ready for ONNX Runtime inference")
 }

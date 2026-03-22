@@ -1,6 +1,6 @@
 # Project: goSentencePiece
 
-Pure Go port of the SentencePiece Unigram tokenizer for DeBERTa v3 models.
+Pure Go SentencePiece tokenizer (Unigram + BPE). Loads both SentencePiece `.model` (protobuf) and HuggingFace `tokenizer.json` formats.
 
 ## Python
 
@@ -12,13 +12,13 @@ Pure Go port of the SentencePiece Unigram tokenizer for DeBERTa v3 models.
 ## Go
 
 - Module: `github.com/tggo/goSentencePiece`
-- Min version: Go 1.22
+- Min version: Go 1.23
 - Dependencies: stdlib + `google.golang.org/protobuf`
 
 ## Commands
 
 - `make venv` — create Python venv and install dependencies
-- `make golden` — generate golden test dataset
+- `make golden` — generate golden test datasets (SentencePiece + HuggingFace)
 - `make proto` — generate Go protobuf code
 - `make test` — run Go tests
 - `make bench` — run benchmarks
@@ -27,6 +27,5 @@ Pure Go port of the SentencePiece Unigram tokenizer for DeBERTa v3 models.
 
 ## Structure
 
-- `_testdata/` — test data (spm.model, golden/)
+- `_testdata/` — test data (spm.model, bpe.model, tokenizer.json, golden/)
 - `proto/` — generated protobuf Go code
-- `status.log` — work progress log
