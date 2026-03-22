@@ -58,7 +58,7 @@ func main() {
 ## Features
 
 - **Pure Go** -- zero CGo, zero Rust FFI, zero external C libraries
-- **Byte-identical** to the reference C++ implementation (validated against 505 golden test cases)
+- **Byte-identical** to the reference C++ implementation (validated against 5155 golden test cases)
 - **Unigram model** with Viterbi decoding
 - **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
 - **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
@@ -122,24 +122,23 @@ Other Unigram models (XLNet, ALBERT, T5, etc.) should work but are not yet teste
 
 ## Benchmarks
 
-Measured on Apple M1 Pro:
+Measured on Apple M4 Max. Python `sentencepiece` is a C++ library with Python SWIG bindings.
 
-| Input | Go | Allocs |
-|-------|-----|--------|
-| Short (11 chars) | ~330 ns | 5 |
-| Medium (120 chars) | ~3.5 us | 10 |
-| Long (4500 chars) | ~102 us | 15 |
+| Operation | Input | Go | Python (C++) | Speedup |
+|-----------|-------|---:|-------------:|--------:|
+| Encode | short (11 chars) | 301 ns | 1.1 μs | **3.7x** |
+| Encode | medium (120 chars) | 3.3 μs | 5.6 μs | **1.7x** |
+| Encode | long (4500 chars) | 94 μs | 183 μs | **1.9x** |
+| Decode | short (10 tokens) | 343 ns | 801 ns | **2.3x** |
 
-Run benchmarks yourself:
+Go beats the C++ reference on short inputs (Python FFI overhead dominates).
+On long inputs, pure Go Viterbi is ~2x faster than C++ via Python bindings.
 
 ```bash
+# Go benchmarks
 make bench
-```
 
-To compare with Python:
-
-```bash
-make venv
+# Python benchmarks (requires make venv)
 .venv/bin/python _testdata/bench_python.py
 ```
 
