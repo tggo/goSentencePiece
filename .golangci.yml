@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 5m
 
@@ -12,12 +14,10 @@ linters:
     - errcheck
     - gosimple
     - unused
-  disable:
-    - depguard
 
-linters-settings:
-  gocyclo:
-    min-complexity: 15
+  settings:
+    gocyclo:
+      min-complexity: 15
 
 issues:
   exclude-dirs:
