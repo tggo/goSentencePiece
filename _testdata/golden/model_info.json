@@ -1,0 +1,225 @@
+{
+  "vocab_size": 128000,
+  "model_type": "unigram",
+  "bos_id": 1,
+  "eos_id": 2,
+  "unk_id": 3,
+  "pad_id": 0,
+  "byte_fallback": true,
+  "first_20_tokens": [
+    {
+      "piece": "[PAD]",
+      "score": 0.0,
+      "type": "CONTROL",
+      "id": 0
+    },
+    {
+      "piece": "[CLS]",
+      "score": 0.0,
+      "type": "CONTROL",
+      "id": 1
+    },
+    {
+      "piece": "[SEP]",
+      "score": 0.0,
+      "type": "CONTROL",
+      "id": 2
+    },
+    {
+      "piece": "[UNK]",
+      "score": 0.0,
+      "type": "UNKNOWN",
+      "id": 3
+    },
+    {
+      "piece": "<0x00>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 4
+    },
+    {
+      "piece": "<0x01>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 5
+    },
+    {
+      "piece": "<0x02>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 6
+    },
+    {
+      "piece": "<0x03>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 7
+    },
+    {
+      "piece": "<0x04>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 8
+    },
+    {
+      "piece": "<0x05>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 9
+    },
+    {
+      "piece": "<0x06>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 10
+    },
+    {
+      "piece": "<0x07>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 11
+    },
+    {
+      "piece": "<0x08>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 12
+    },
+    {
+      "piece": "<0x09>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 13
+    },
+    {
+      "piece": "<0x0A>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 14
+    },
+    {
+      "piece": "<0x0B>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 15
+    },
+    {
+      "piece": "<0x0C>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 16
+    },
+    {
+      "piece": "<0x0D>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 17
+    },
+    {
+      "piece": "<0x0E>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 18
+    },
+    {
+      "piece": "<0x0F>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 19
+    }
+  ],
+  "sample_byte_tokens": [
+    {
+      "piece": "<0x00>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 4
+    },
+    {
+      "piece": "<0x01>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 5
+    },
+    {
+      "piece": "<0x02>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 6
+    },
+    {
+      "piece": "<0x03>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 7
+    },
+    {
+      "piece": "<0x04>",
+      "score": 0.0,
+      "type": "BYTE",
+      "id": 8
+    }
+  ],
+  "sample_normal_tokens": [
+    {
+      "piece": ".",
+      "score": -3.095722198486328,
+      "type": "NORMAL",
+      "id": 260
+    },
+    {
+      "piece": ",",
+      "score": -3.2606236934661865,
+      "type": "NORMAL",
+      "id": 261
+    },
+    {
+      "piece": "▁the",
+      "score": -3.294761896133423,
+      "type": "NORMAL",
+      "id": 262
+    },
+    {
+      "piece": "▁and",
+      "score": -3.796011447906494,
+      "type": "NORMAL",
+      "id": 263
+    },
+    {
+      "piece": "▁to",
+      "score": -3.8229689598083496,
+      "type": "NORMAL",
+      "id": 264
+    },
+    {
+      "piece": "▁of",
+      "score": -3.9138824939727783,
+      "type": "NORMAL",
+      "id": 265
+    },
+    {
+      "piece": "▁a",
+      "score": -4.052096843719482,
+      "type": "NORMAL",
+      "id": 266
+    },
+    {
+      "piece": "▁in",
+      "score": -4.314146041870117,
+      "type": "NORMAL",
+      "id": 267
+    },
+    {
+      "piece": "s",
+      "score": -4.483578205108643,
+      "type": "NORMAL",
+      "id": 268
+    },
+    {
+      "piece": "▁is",
+      "score": -4.681629657745361,
+      "type": "NORMAL",
+      "id": 269
+    }
+  ]
+}

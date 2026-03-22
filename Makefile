@@ -1,0 +1,57 @@
+SHELL := /bin/bash
+VENV := .venv
+PYTHON := $(VENV)/bin/python3
+PIP := $(VENV)/bin/pip
+MODEL := _testdata/spm.model
+GOLDEN := _testdata/golden/test_cases.jsonl
+PROTO_SRC := proto/sentencepiece_model.proto
+PROTO_GO := proto/sentencepiece_model.pb.go
+
+.PHONY: all venv deps golden proto test bench fuzz clean
+
+all: venv deps golden proto test
+
+# ── Python venv ──────────────────────────────────────────────
+venv: $(VENV)/bin/activate
+
+$(VENV)/bin/activate:
+	python3 -m venv $(VENV)
+	$(PIP) install --upgrade pip
+	$(PIP) install sentencepiece transformers protobuf torch --extra-index-url https://download.pytorch.org/whl/cpu
+	@echo "✓ venv ready"
+
+deps: venv
+
+# ── Golden test data ─────────────────────────────────────────
+golden: $(GOLDEN)
+
+$(GOLDEN): $(MODEL) _testdata/generate_golden.py | venv
+	$(PYTHON) _testdata/generate_golden.py
+	@echo "✓ golden data generated"
+
+$(MODEL): _testdata/download_model.py | venv
+	$(PYTHON) _testdata/download_model.py
+	@echo "✓ model downloaded"
+
+# ── Protobuf ─────────────────────────────────────────────────
+proto: $(PROTO_GO)
+
+$(PROTO_GO): $(PROTO_SRC)
+	protoc --go_out=. --go_opt=paths=source_relative $(PROTO_SRC)
+	@echo "✓ protobuf generated"
+
+# ── Go ───────────────────────────────────────────────────────
+test:
+	go test -v -count=1 ./...
+
+bench:
+	go test -bench=. -benchmem -count=3 ./...
+
+fuzz:
+	go test -fuzz=FuzzEncode -fuzztime=60s ./...
+
+# ── Cleanup ──────────────────────────────────────────────────
+clean:
+	rm -rf $(VENV)
+	rm -f $(GOLDEN) _testdata/golden/model_info.json
+	rm -f $(PROTO_GO)

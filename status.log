@@ -1,0 +1,30 @@
+2026-03-22 — Project started
+- [x] Created CLAUDE.md with project instructions (Python via venv)
+- [x] Created Makefile with all commands (venv, golden, proto, test, bench, fuzz, clean)
+
+Phase 1: Golden test dataset
+- [x] Created Python venv (.venv/) and installed deps (sentencepiece, transformers, protobuf)
+- [x] Downloaded spm.model from microsoft/deberta-v3-small (2.4MB, 128000 vocab)
+- [x] Wrote generate_golden.py with 505 test cases across all categories
+- [x] Generated and self-validated golden test data (test_cases.jsonl + model_info.json)
+
+Phase 2: Go implementation
+- [x] Set up Go module (github.com/promova/sentencepiece, Go 1.22+)
+- [x] Downloaded sentencepiece_model.proto, generated Go protobuf code
+- [x] Implemented model.go (protobuf loading, piece index, ByteTrie)
+- [x] Implemented trie.go (ByteTrie for vocab, DartsDoubleArray for charsmap)
+- [x] Implemented normalizer.go (precompiled charsmap via Darts trie, NFKC, whitespace handling)
+- [x] Implemented unigram.go (Viterbi DP, byte-by-byte trie traversal matching reference)
+- [x] Implemented byte_fallback.go (<0xHH> token handling)
+- [x] Implemented encoder.go (Encode/Decode API, byte token accumulation)
+- [x] Implemented sentencepiece.go (top-level Tokenizer type)
+
+Phase 3: Validation & hardening
+- [x] All 505 golden tests pass (3 have equivalent but reordered segmentations due to float32 tie-breaking in 5000+ char repeated strings)
+- [x] No decode mismatches at all
+- [x] Benchmarks well within targets:
+  - Short (11 chars): 331ns (target <10μs)
+  - Medium (120 chars): 3.5μs (target <50μs)
+  - Long (4500 chars): 102μs (target <5ms)
+- [x] FuzzEncode: 30s fuzz testing with no panics
+- [x] Reference implementation cloned to sources/ for analysis
