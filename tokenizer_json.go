@@ -368,9 +368,9 @@ func buildAddedTokensTrie(addedTokens []addedTokenJSON) *ByteTrie {
 type preTokenizerKind int
 
 const (
-	preTokenizerNone                       preTokenizerKind = iota
-	preTokenizerMetaspace                                   // standalone Metaspace
-	preTokenizerWhitespaceSplitMetaspace                    // Sequence(WhitespaceSplit, Metaspace)
+	preTokenizerNone                     preTokenizerKind = iota
+	preTokenizerMetaspace                                 // standalone Metaspace
+	preTokenizerWhitespaceSplitMetaspace                  // Sequence(WhitespaceSplit, Metaspace)
 )
 
 // detectPreTokenizer inspects the pre_tokenizer JSON and returns its kind.
@@ -380,8 +380,8 @@ func detectPreTokenizer(raw json.RawMessage) preTokenizerKind {
 	}
 
 	var pt struct {
-		Type           string            `json:"type"`
-		PreTokenizers  []json.RawMessage `json:"pretokenizers"`
+		Type          string            `json:"type"`
+		PreTokenizers []json.RawMessage `json:"pretokenizers"`
 	}
 	if json.Unmarshal(raw, &pt) != nil {
 		return preTokenizerNone
@@ -394,7 +394,9 @@ func detectPreTokenizer(raw json.RawMessage) preTokenizerKind {
 	if pt.Type == "Sequence" && len(pt.PreTokenizers) >= 2 {
 		var types []string
 		for _, sub := range pt.PreTokenizers {
-			var s struct{ Type string `json:"type"` }
+			var s struct {
+				Type string `json:"type"`
+			}
 			if json.Unmarshal(sub, &s) == nil {
 				types = append(types, s.Type)
 			}
