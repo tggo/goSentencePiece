@@ -176,24 +176,24 @@ func BenchmarkEncode(b *testing.B) {
 	}
 
 	b.Run("short", func(b *testing.B) {
-		for b.Loop() {
+		for i := 0; i < b.N; i++ {
 			tok.Encode("Hello world")
 		}
 	})
 
 	b.Run("medium", func(b *testing.B) {
 		text := "The quick brown fox jumps over the lazy dog. This is a medium length string for benchmarking the tokenizer performance."
-		for b.Loop() {
+		for i := 0; i < b.N; i++ {
 			tok.Encode(text)
 		}
 	})
 
 	b.Run("long", func(b *testing.B) {
 		text := ""
-		for range 100 {
+		for i := 0; i < 100; i++ {
 			text += "The quick brown fox jumps over the lazy dog. "
 		}
-		for b.Loop() {
+		for i := 0; i < b.N; i++ {
 			tok.Encode(text)
 		}
 	})
@@ -207,7 +207,7 @@ func BenchmarkDecode(b *testing.B) {
 
 	ids, _ := tok.Encode("The quick brown fox jumps over the lazy dog.")
 
-	for b.Loop() {
+	for i := 0; i < b.N; i++ {
 		tok.Decode(ids)
 	}
 }
@@ -238,12 +238,12 @@ func FuzzEncode(f *testing.F) {
 		"e\u0301",
 		"ＡＢＣ",
 		"①②③",
-		string([]byte{0xC0, 0xAF}),        // overlong UTF-8
-		string([]byte{0xED, 0xA0, 0x80}),  // surrogate half
-		string([]byte{0xF4, 0x90, 0x80}),  // truncated 4-byte
+		string([]byte{0xC0, 0xAF}),         // overlong UTF-8
+		string([]byte{0xED, 0xA0, 0x80}),   // surrogate half
+		string([]byte{0xF4, 0x90, 0x80}),   // truncated 4-byte
 		"ab\x80cd",                         // invalid continuation
 		"hello\xFFworld",                   // 0xFF byte
-		"\x00\x01\x02\x03\x04\x05",        // low control chars
+		"\x00\x01\x02\x03\x04\x05",         // low control chars
 		"a" + string(rune(0x10FFFF)) + "b", // max unicode
 		"x\u0300\u0301\u0302\u0303\u0304",  // stacked combiners
 		"   \t\t\n\n   ",                   // only whitespace
@@ -329,7 +329,7 @@ func FuzzDecode(f *testing.F) {
 	vocabSize := tok.VocabSize()
 
 	// Seed with known valid ID sequences.
-	f.Add([]byte{0, 0, 0, 1}) // single token ID=1
+	f.Add([]byte{0, 0, 0, 1})                   // single token ID=1
 	f.Add([]byte{0, 0, 1, 0xFB, 0, 0, 1, 0xFC}) // two IDs
 
 	f.Fuzz(func(t *testing.T, data []byte) {

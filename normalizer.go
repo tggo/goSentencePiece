@@ -60,23 +60,7 @@ func (n *Normalizer) Normalize(input string) string {
 		return ""
 	}
 
-	remaining := input
-
-	// Step 1: Skip leading whitespace (if removeExtraWhitespace).
-	if n.removeExtraWhitespace {
-		for len(remaining) > 0 {
-			consumed, replacement := n.normalizePrefix([]byte(remaining))
-			if consumed == 0 {
-				break
-			}
-			if replacement != " " {
-				break
-			}
-			remaining = remaining[consumed:]
-		}
-	}
-
-	// All chars are whitespace.
+	remaining := n.skipLeadingWhitespace(input)
 	if len(remaining) == 0 {
 		return ""
 	}
@@ -84,16 +68,43 @@ func (n *Normalizer) Normalize(input string) string {
 	var buf strings.Builder
 	buf.Grow(len(input) + 3)
 
-	// Step 2: Add dummy prefix.
-	if n.addDummyPrefix {
-		if n.escapeWhitespaces {
-			buf.WriteString(metaSpace)
-		} else {
-			buf.WriteByte(' ')
-		}
-	}
+	n.writeDummyPrefix(&buf)
+	n.processChars(&buf, remaining)
 
-	// Step 3: Process remaining characters.
+	return n.trimTrailingSpaces(buf.String())
+}
+
+// skipLeadingWhitespace consumes leading chars that normalize to space.
+func (n *Normalizer) skipLeadingWhitespace(input string) string {
+	if !n.removeExtraWhitespace {
+		return input
+	}
+	remaining := input
+	for len(remaining) > 0 {
+		consumed, replacement := n.normalizePrefix([]byte(remaining))
+		if consumed == 0 || replacement != " " {
+			break
+		}
+		remaining = remaining[consumed:]
+	}
+	return remaining
+}
+
+// writeDummyPrefix writes the prefix space/metaspace if configured.
+func (n *Normalizer) writeDummyPrefix(buf *strings.Builder) {
+	if !n.addDummyPrefix {
+		return
+	}
+	if n.escapeWhitespaces {
+		buf.WriteString(metaSpace)
+	} else {
+		buf.WriteByte(' ')
+	}
+}
+
+// processChars processes the remaining input character by character through the
+// charsmap, deduplicating spaces and escaping whitespace as configured.
+func (n *Normalizer) processChars(buf *strings.Builder, remaining string) {
 	isPrevSpace := n.removeExtraWhitespace
 
 	for len(remaining) > 0 {
@@ -102,7 +113,7 @@ func (n *Normalizer) Normalize(input string) string {
 			break
 		}
 
-		// Remove heading spaces from the replacement if previous was space.
+		// Remove heading spaces if previous output was space.
 		if isPrevSpace {
 			for strings.HasPrefix(sp, " ") {
 				sp = sp[1:]
@@ -110,15 +121,7 @@ func (n *Normalizer) Normalize(input string) string {
 		}
 
 		if len(sp) > 0 {
-			// Write each byte, replacing ' ' with ▁ if escapeWhitespaces.
-			for i := 0; i < len(sp); i++ {
-				if n.escapeWhitespaces && sp[i] == ' ' {
-					buf.WriteString(metaSpace)
-				} else {
-					buf.WriteByte(sp[i])
-				}
-			}
-			// Check if the replacement ends with space.
+			n.writeReplacement(buf, sp)
 			isPrevSpace = sp[len(sp)-1] == ' '
 		}
 
@@ -127,20 +130,32 @@ func (n *Normalizer) Normalize(input string) string {
 			isPrevSpace = false
 		}
 	}
+}
 
-	result := buf.String()
-
-	// Step 4: Remove trailing escaped spaces.
-	if n.removeExtraWhitespace {
-		space := metaSpace
-		if !n.escapeWhitespaces {
-			space = " "
-		}
-		for strings.HasSuffix(result, space) {
-			result = result[:len(result)-len(space)]
+// writeReplacement writes a charsmap replacement to buf, escaping spaces to
+// metaspace if configured.
+func (n *Normalizer) writeReplacement(buf *strings.Builder, sp string) {
+	for i := 0; i < len(sp); i++ {
+		if n.escapeWhitespaces && sp[i] == ' ' {
+			buf.WriteString(metaSpace)
+		} else {
+			buf.WriteByte(sp[i])
 		}
 	}
+}
 
+// trimTrailingSpaces removes trailing escaped/raw spaces from the result.
+func (n *Normalizer) trimTrailingSpaces(result string) string {
+	if !n.removeExtraWhitespace {
+		return result
+	}
+	space := metaSpace
+	if !n.escapeWhitespaces {
+		space = " "
+	}
+	for strings.HasSuffix(result, space) {
+		result = result[:len(result)-len(space)]
+	}
 	return result
 }
 
@@ -152,23 +167,18 @@ func (n *Normalizer) normalizePrefix(input []byte) (int, string) {
 	}
 
 	if n.trie != nil {
-		// Find all prefix matches.
 		matches := n.trie.CommonPrefixSearchBytes(input)
-
 		if len(matches) > 0 {
-			// Use the longest match.
 			best := matches[len(matches)-1]
 			consumed := best.Length
 
-			// Extract the replacement string from normalized data.
 			offset := best.Value
 			if offset < len(n.normalized) {
 				end := offset
 				for end < len(n.normalized) && n.normalized[end] != 0 {
 					end++
 				}
-				replacement := string(n.normalized[offset:end])
-				return consumed, replacement
+				return consumed, string(n.normalized[offset:end])
 			}
 		}
 	}
@@ -178,7 +188,6 @@ func (n *Normalizer) normalizePrefix(input []byte) (int, string) {
 	// chars should not be NFKC-normalized again.
 	r, size := utf8.DecodeRune(input)
 	if r == utf8.RuneError && size <= 1 {
-		// Invalid UTF-8: replace with U+FFFD.
 		return 1, "\uFFFD"
 	}
 
