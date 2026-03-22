@@ -1,28 +1,23 @@
 # goSentencePiece
 
-Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) Unigram tokenizer. Produces **byte-identical output** to the C++ / Python `sentencepiece` library.
+[![CI](https://github.com/tggo/goSentencePiece/actions/workflows/ci.yml/badge.svg)](https://github.com/tggo/goSentencePiece/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/tggo/goSentencePiece.svg)](https://pkg.go.dev/github.com/tggo/goSentencePiece)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tggo/goSentencePiece)](https://goreportcard.com/report/github.com/tggo/goSentencePiece)
+[![Coverage](https://img.shields.io/badge/coverage-84.9%25-brightgreen)](https://github.com/tggo/goSentencePiece)
 
-Built for running DeBERTa v3 (and other Unigram-based models) in Go services without CGo or Python dependencies.
+Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) Unigram tokenizer. Produces **byte-identical output** to the C++ / Python `sentencepiece` library -- no CGo, no Rust FFI, no external C libraries.
 
-## Features
-
-- **Pure Go** — no CGo, no Rust FFI, no external C libraries
-- **Byte-identical** to the reference C++ implementation (validated against 505 golden test cases)
-- **Unigram model** with Viterbi decoding
-- **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
-- **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
-- **Fast**: short strings ~330ns, medium ~3.5μs, long (4500 chars) ~100μs
-- Zero runtime dependencies beyond stdlib + `google.golang.org/protobuf` + `golang.org/x/text`
+Built for running DeBERTa v3 (and other Unigram-based models) in Go services.
 
 ## Installation
 
 ```bash
-go get github.com/promova/sentencepiece
+go get github.com/tggo/goSentencePiece
 ```
 
 Requires Go 1.22+.
 
-## Usage
+## Quick Start
 
 ```go
 package main
@@ -31,7 +26,7 @@ import (
     "fmt"
     "log"
 
-    sp "github.com/promova/sentencepiece"
+    sp "github.com/tggo/goSentencePiece"
 )
 
 func main() {
@@ -60,11 +55,27 @@ func main() {
 }
 ```
 
+## Features
+
+- **Pure Go** -- zero CGo, zero Rust FFI, zero external C libraries
+- **Byte-identical** to the reference C++ implementation (validated against 505 golden test cases)
+- **Unigram model** with Viterbi decoding
+- **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
+- **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
+- **io.Reader support** -- load models from embedded files, HTTP responses, or any reader
+- **Fast** -- see benchmarks below
+- Zero runtime dependencies beyond stdlib + `google.golang.org/protobuf`
+
 ## API
 
+### Tokenizer
+
 ```go
-// Create a tokenizer from a .model file
+// Create from file path
 func NewTokenizer(modelPath string) (*Tokenizer, error)
+
+// Create from io.Reader (embedded files, HTTP responses, etc.)
+func NewTokenizerFromReader(r io.Reader) (*Tokenizer, error)
 
 // Encode text to token IDs
 func (t *Tokenizer) Encode(text string) ([]int, error)
@@ -82,7 +93,22 @@ func (t *Tokenizer) AddSpecialTokens(ids []int) []int
 func (t *Tokenizer) VocabSize() int
 ```
 
-## Supported models
+### Model
+
+```go
+// Load model from file
+func LoadModel(path string) (*Model, error)
+
+// Load model from reader
+func LoadModelFromReader(r io.Reader) (*Model, error)
+
+// Vocabulary lookup
+func (m *Model) VocabSize() int
+func (m *Model) IdToPiece(id int) string
+func (m *Model) PieceToId(piece string) int
+```
+
+## Supported Models
 
 Any SentencePiece `.model` file that uses the **Unigram** model type. Tested with:
 
@@ -94,12 +120,57 @@ Other Unigram models (XLNet, ALBERT, T5, etc.) should work but are not yet teste
 
 **Note:** BPE models are not supported.
 
-## Running tests
+## Benchmarks
 
-The test suite requires the SentencePiece model file. Download it first:
+Measured on Apple M1 Pro:
+
+| Input | Go | Allocs |
+|-------|-----|--------|
+| Short (11 chars) | ~330 ns | 5 |
+| Medium (120 chars) | ~3.5 us | 10 |
+| Long (4500 chars) | ~102 us | 15 |
+
+Run benchmarks yourself:
 
 ```bash
-# Set up Python venv and download model
+make bench
+```
+
+To compare with Python:
+
+```bash
+make venv
+.venv/bin/python _testdata/bench_python.py
+```
+
+## Project Structure
+
+```
+sentencepiece.go    -- public Tokenizer type and constructors
+model.go            -- protobuf loading, vocab index, ByteTrie
+normalizer.go       -- precompiled charsmap (Darts trie), NFKC, whitespace
+unigram.go          -- Viterbi decoding (forward DP + backtrack)
+encoder.go          -- Encode/Decode with byte-token handling
+byte_fallback.go    -- <0xHH> token encoding/decoding
+trie.go             -- ByteTrie (vocab), DartsDoubleArray (charsmap)
+proto/              -- generated protobuf code
+_testdata/          -- test model and golden test cases
+```
+
+## How It Works
+
+1. **Normalization**: Input text is normalized using the model's precompiled character map (a Darts double-array trie that encodes NFKC and custom rules). Whitespace is deduplicated, a prefix space is added, and spaces are replaced with the metaspace character.
+
+2. **Viterbi tokenization**: The normalized text is segmented into pieces using dynamic programming. A byte-level trie is traversed to find all vocabulary pieces starting at each position. The algorithm finds the segmentation that maximizes total log-probability.
+
+3. **Byte fallback**: Characters not covered by any vocabulary piece are encoded as individual UTF-8 bytes using `<0xHH>` tokens.
+
+4. **Decoding**: Token IDs are mapped back to piece strings. Byte tokens are accumulated and flushed as UTF-8. The metaspace prefix is converted back to spaces.
+
+## Running Tests
+
+```bash
+# Set up Python venv and download model + golden data
 make venv
 make golden
 
@@ -111,41 +182,14 @@ make bench
 
 # Run fuzz tests (60s)
 make fuzz
+
+# Run linters
+make lint
+
+# Run tests with coverage
+make cover
 ```
-
-## Benchmarks
-
-Measured on Apple M1 Pro:
-
-| Input | Time | Allocs |
-|-------|------|--------|
-| Short (11 chars) | 331 ns | 5 |
-| Medium (120 chars) | 3.5 μs | 10 |
-| Long (4500 chars) | 102 μs | 15 |
-
-## Architecture
-
-```
-sentencepiece.go    — public Tokenizer type and constructor
-model.go            — protobuf loading, vocab index, ByteTrie
-normalizer.go       — precompiled charsmap (Darts trie), NFKC, whitespace
-unigram.go          — Viterbi decoding (forward DP + backtrack)
-encoder.go          — Encode/Decode with byte-token handling
-byte_fallback.go    — <0xHH> token encoding/decoding
-trie.go             — ByteTrie (vocab), DartsDoubleArray (charsmap)
-proto/              — generated protobuf code
-```
-
-## How it works
-
-1. **Normalization**: Input text is normalized using the model's precompiled character map (a Darts double-array trie that encodes NFKC and custom rules). Whitespace is deduplicated, a prefix space is added, and spaces are replaced with `▁` (U+2581).
-
-2. **Viterbi tokenization**: The normalized text is segmented into pieces using dynamic programming. A byte-level trie is traversed to find all vocabulary pieces starting at each position. The algorithm finds the segmentation that maximizes total log-probability.
-
-3. **Byte fallback**: Characters not covered by any vocabulary piece are encoded as individual UTF-8 bytes using `<0xHH>` tokens.
-
-4. **Decoding**: Token IDs are mapped back to piece strings. Byte tokens are accumulated and flushed as UTF-8. The `▁` prefix is converted back to spaces.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).

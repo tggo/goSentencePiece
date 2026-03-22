@@ -2,33 +2,45 @@ package sentencepiece
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"os"
 
-	pb "github.com/promova/sentencepiece/proto"
+	pb "github.com/tggo/goSentencePiece/proto"
 	"google.golang.org/protobuf/proto"
 )
 
-// PieceType represents the type of a vocabulary piece.
+// PieceType represents the type of a vocabulary piece as defined by the
+// SentencePiece model specification. Each piece in the vocabulary has a type
+// that determines how it is handled during encoding and decoding.
 type PieceType int32
 
 const (
-	PieceNormal      PieceType = 1
-	PieceUnknown     PieceType = 2
-	PieceControl     PieceType = 3
+	// PieceNormal is a regular vocabulary piece learned during training.
+	PieceNormal PieceType = 1
+	// PieceUnknown represents the unknown token used for out-of-vocabulary inputs.
+	PieceUnknown PieceType = 2
+	// PieceControl represents control tokens such as BOS and EOS.
+	PieceControl PieceType = 3
+	// PieceUserDefined represents user-defined tokens that always take priority.
 	PieceUserDefined PieceType = 4
-	PieceUnused      PieceType = 5
-	PieceByte        PieceType = 6
+	// PieceUnused represents unused/reserved vocabulary slots.
+	PieceUnused PieceType = 5
+	// PieceByte represents a byte-level fallback token (e.g., "<0x41>").
+	PieceByte PieceType = 6
 )
 
-// Piece represents a single vocabulary entry.
+// Piece represents a single entry in the SentencePiece vocabulary, including
+// its string representation, log-probability score, and type.
 type Piece struct {
 	Piece string
 	Score float32
 	Type  PieceType
 }
 
-// Model holds the loaded SentencePiece model data.
+// Model holds the loaded SentencePiece model data, including the vocabulary,
+// piece index, normalizer configuration, and a byte trie for efficient prefix
+// matching during Viterbi tokenization.
 type Model struct {
 	pieces       []Piece
 	pieceIndex   map[string]int
@@ -51,13 +63,29 @@ type Model struct {
 	minScoreVal float32
 }
 
-// LoadModel loads a SentencePiece model from a .model file.
+// LoadModel loads and parses a SentencePiece model from a .model file at the
+// given path. It reads the protobuf data, builds the vocabulary index and byte
+// trie, and extracts normalizer and trainer configuration.
 func LoadModel(path string) (*Model, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read model file: %w", err)
 	}
+	return loadModelFromBytes(data)
+}
 
+// LoadModelFromReader loads and parses a SentencePiece model from the provided
+// io.Reader. This allows loading models from any source, such as embedded
+// files, network streams, or in-memory buffers.
+func LoadModelFromReader(r io.Reader) (*Model, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read model data: %w", err)
+	}
+	return loadModelFromBytes(data)
+}
+
+func loadModelFromBytes(data []byte) (*Model, error) {
 	var modelProto pb.ModelProto
 	if err := proto.Unmarshal(data, &modelProto); err != nil {
 		return nil, fmt.Errorf("unmarshal protobuf: %w", err)
@@ -120,12 +148,14 @@ func LoadModel(path string) (*Model, error) {
 	return m, nil
 }
 
-// VocabSize returns the number of pieces in the vocabulary.
+// VocabSize returns the total number of pieces in the vocabulary, including
+// normal, control, byte, and special tokens.
 func (m *Model) VocabSize() int {
 	return len(m.pieces)
 }
 
-// IdToPiece returns the piece string for a given ID.
+// IdToPiece returns the string representation of the piece with the given ID.
+// It returns an empty string if the ID is out of range.
 func (m *Model) IdToPiece(id int) string {
 	if id < 0 || id >= len(m.pieces) {
 		return ""
@@ -133,8 +163,8 @@ func (m *Model) IdToPiece(id int) string {
 	return m.pieces[id].Piece
 }
 
-// PieceToId returns the ID for a given piece string.
-// Returns unkID if not found.
+// PieceToId returns the vocabulary ID for the given piece string.
+// It returns the unknown token ID if the piece is not found in the vocabulary.
 func (m *Model) PieceToId(piece string) int {
 	if id, ok := m.pieceIndex[piece]; ok {
 		return id

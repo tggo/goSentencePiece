@@ -4,13 +4,16 @@ import (
 	"strings"
 )
 
-// Encoder handles the encoding and decoding of text.
+// Encoder handles the full encoding and decoding pipeline, combining
+// normalization and Unigram Viterbi tokenization. It is the core engine
+// used by Tokenizer.
 type Encoder struct {
 	model      *Model
 	normalizer *Normalizer
 }
 
-// NewEncoder creates a new encoder for the given model.
+// NewEncoder creates a new Encoder for the given model, initializing the
+// normalizer from the model's NormalizerSpec configuration.
 func NewEncoder(model *Model) *Encoder {
 	return &Encoder{
 		model:      model,
@@ -18,7 +21,8 @@ func NewEncoder(model *Model) *Encoder {
 	}
 }
 
-// Encode tokenizes the input text and returns token IDs.
+// Encode normalizes and tokenizes the input text, returning the resulting
+// token IDs. It returns nil for empty input.
 func (e *Encoder) Encode(text string) []int {
 	if len(text) == 0 {
 		return nil
@@ -35,7 +39,8 @@ func (e *Encoder) Encode(text string) []int {
 	return ids
 }
 
-// EncodeAsPieces tokenizes the input text and returns piece strings.
+// EncodeAsPieces normalizes and tokenizes the input text, returning the string
+// representation of each token piece. It returns nil for empty input.
 func (e *Encoder) EncodeAsPieces(text string) []string {
 	if len(text) == 0 {
 		return nil
@@ -52,7 +57,9 @@ func (e *Encoder) EncodeAsPieces(text string) []string {
 	return result
 }
 
-// Decode converts token IDs back to a string.
+// Decode converts a sequence of token IDs back to the original text string.
+// Control tokens are skipped, byte-fallback tokens are reassembled into UTF-8,
+// and the SentencePiece meta-space character is converted back to a regular space.
 func (e *Encoder) Decode(ids []int) string {
 	if len(ids) == 0 {
 		return ""

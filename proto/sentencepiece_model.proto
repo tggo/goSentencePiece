@@ -16,7 +16,7 @@ syntax = "proto2";
 
 // TODO(taku): Needs to use LITE RUNTIME in OSS release.
 option optimize_for = LITE_RUNTIME;
-option go_package = "github.com/promova/sentencepiece/proto";
+option go_package = "github.com/tggo/goSentencePiece/proto";
 
 package sentencepiece;
 

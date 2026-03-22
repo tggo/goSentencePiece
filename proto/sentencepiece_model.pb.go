@@ -1197,7 +1197,7 @@ const file_proto_sentencepiece_model_proto_rawDesc = "" +
 	"\fUSER_DEFINED\x10\x04\x12\b\n" +
 	"\x04BYTE\x10\x06\x12\n" +
 	"\n" +
-	"\x06UNUSED\x10\x05*\t\b\xc8\x01\x10\x80\x80\x80\x80\x02*\t\b\xc8\x01\x10\x80\x80\x80\x80\x02B*H\x03Z&github.com/promova/sentencepiece/proto"
+	"\x06UNUSED\x10\x05*\t\b\xc8\x01\x10\x80\x80\x80\x80\x02*\t\b\xc8\x01\x10\x80\x80\x80\x80\x02B)H\x03Z%github.com/tggo/goSentencePiece/proto"
 
 var (
 	file_proto_sentencepiece_model_proto_rawDescOnce sync.Once
