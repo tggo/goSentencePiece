@@ -1,6 +1,7 @@
 package sentencepiece
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 // tokenizerJSON represents the top-level HuggingFace tokenizer.json structure.
 type tokenizerJSON struct {
 	AddedTokens   []addedTokenJSON `json:"added_tokens"`
+	Normalizer    json.RawMessage  `json:"normalizer"`
 	PreTokenizer  json.RawMessage  `json:"pre_tokenizer"`
 	Model         modelJSON        `json:"model"`
 	PostProcessor json.RawMessage  `json:"post_processor"`
@@ -65,10 +67,14 @@ func loadFromJSON(data []byte) (*Tokenizer, error) {
 
 	encoder := NewEncoder(model)
 
-	// For JSON tokenizers with Metaspace pre-tokenizer, use custom
-	// pre-tokenization instead of SentencePiece normalization.
-	if hasMetaspacePreTokenizer(tj.PreTokenizer) {
+	// Configure pre-tokenization based on JSON pre_tokenizer type.
+	preTokenizerKind := detectPreTokenizer(tj.PreTokenizer)
+	switch preTokenizerKind {
+	case preTokenizerMetaspace:
 		encoder.preTokenize = metaspacePreTokenize
+		encoder.stripLeadingSpace = false
+	case preTokenizerWhitespaceSplitMetaspace:
+		encoder.preTokenize = whitespaceSplitMetaspacePreTokenize
 		encoder.stripLeadingSpace = false
 	}
 
@@ -113,10 +119,27 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 		}
 	}
 
-	// Normalizer config is only used as fallback when the Metaspace
-	// pre-tokenizer is not active (the Metaspace path bypasses the
-	// SentencePiece normalizer entirely via encoder.preTokenize).
-	addDummy, escapeSp := parseJSONNormConfig(tj.PreTokenizer)
+	// Determine normalizer settings from the pre-tokenizer config.
+	// When a pre-tokenize function is set, it handles space conversion,
+	// so addDummyPrefix and escapeWhitespaces are set based on whether
+	// the normalizer should also handle spaces (for the Metaspace-only
+	// case where normalization runs before pre-tokenization).
+	preTokKind := detectPreTokenizer(tj.PreTokenizer)
+	var addDummy, escapeSp bool
+	switch preTokKind {
+	case preTokenizerMetaspace:
+		// Metaspace pre-tokenizer handles space replacement and ▁ prepending;
+		// normalizer should not duplicate this work.
+		addDummy = false
+		escapeSp = false
+	case preTokenizerWhitespaceSplitMetaspace:
+		// WhitespaceSplit+Metaspace handles spaces in the pre-tokenizer;
+		// the normalizer should only apply charsmap (if present).
+		addDummy = false
+		escapeSp = false
+	default:
+		addDummy, escapeSp = parseJSONNormConfig(tj.PreTokenizer)
+	}
 
 	m := &Model{
 		modelType:             modelType,
@@ -130,6 +153,7 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 		addDummyPrefix:        addDummy,
 		escapeWhitespaces:     escapeSp,
 		removeExtraWhitespace: false,
+		precompiledCharsmap:   parsePrecompiledNormalizer(tj.Normalizer),
 	}
 
 	buildModelTrie(m)
@@ -340,20 +364,56 @@ func buildAddedTokensTrie(addedTokens []addedTokenJSON) *ByteTrie {
 	return trie
 }
 
-func hasMetaspacePreTokenizer(preTokData json.RawMessage) bool {
-	if len(preTokData) == 0 || string(preTokData) == "null" {
-		return false
+// preTokenizerKind describes the type of pre-tokenizer detected.
+type preTokenizerKind int
+
+const (
+	preTokenizerNone                       preTokenizerKind = iota
+	preTokenizerMetaspace                                   // standalone Metaspace
+	preTokenizerWhitespaceSplitMetaspace                    // Sequence(WhitespaceSplit, Metaspace)
+)
+
+// detectPreTokenizer inspects the pre_tokenizer JSON and returns its kind.
+func detectPreTokenizer(raw json.RawMessage) preTokenizerKind {
+	if len(raw) == 0 || string(raw) == "null" {
+		return preTokenizerNone
 	}
+
 	var pt struct {
-		Type string `json:"type"`
+		Type           string            `json:"type"`
+		PreTokenizers  []json.RawMessage `json:"pretokenizers"`
 	}
-	return json.Unmarshal(preTokData, &pt) == nil && pt.Type == "Metaspace"
+	if json.Unmarshal(raw, &pt) != nil {
+		return preTokenizerNone
+	}
+
+	if pt.Type == "Metaspace" {
+		return preTokenizerMetaspace
+	}
+
+	if pt.Type == "Sequence" && len(pt.PreTokenizers) >= 2 {
+		var types []string
+		for _, sub := range pt.PreTokenizers {
+			var s struct{ Type string `json:"type"` }
+			if json.Unmarshal(sub, &s) == nil {
+				types = append(types, s.Type)
+			}
+		}
+		if len(types) >= 2 && types[0] == "WhitespaceSplit" && types[1] == "Metaspace" {
+			return preTokenizerWhitespaceSplitMetaspace
+		}
+	}
+
+	return preTokenizerNone
 }
 
 // metaspacePreTokenize implements the HuggingFace Metaspace pre-tokenizer:
 // 1. Replace spaces with ▁
 // 2. Prepend ▁ if text doesn't already start with ▁
 // 3. Split on ▁ boundaries, keeping ▁ with the following segment
+//
+// The input text is already normalized (charsmap applied, spaces untouched
+// for Metaspace-only, or spaces escaped for Metaspace+normalizer combos).
 func metaspacePreTokenize(text string) []string {
 	if len(text) == 0 {
 		return nil
@@ -369,6 +429,22 @@ func metaspacePreTokenize(text string) []string {
 
 	// Split on ▁, keeping ▁ attached to the right segment.
 	return splitKeepDelimiter(text, '▁')
+}
+
+// whitespaceSplitMetaspacePreTokenize implements the HuggingFace
+// Sequence(WhitespaceSplit, Metaspace) pre-tokenizer:
+// 1. Split on whitespace (dropping whitespace tokens)
+// 2. Prepend ▁ to each word
+func whitespaceSplitMetaspacePreTokenize(text string) []string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return nil
+	}
+	segments := make([]string, len(words))
+	for i, w := range words {
+		segments[i] = metaSpace + w
+	}
+	return segments
 }
 
 // splitKeepDelimiter splits text on a delimiter rune, keeping the delimiter
@@ -391,6 +467,30 @@ func splitKeepDelimiter(text string, delim rune) []string {
 	}
 
 	return segments
+}
+
+// parsePrecompiledNormalizer extracts the precompiled charsmap from a
+// Precompiled normalizer JSON. Returns nil if not a Precompiled normalizer
+// or if the charsmap cannot be decoded.
+func parsePrecompiledNormalizer(raw json.RawMessage) []byte {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var norm struct {
+		Type                string `json:"type"`
+		PrecompiledCharsmap string `json:"precompiled_charsmap"`
+	}
+	if json.Unmarshal(raw, &norm) != nil || norm.Type != "Precompiled" {
+		return nil
+	}
+	if norm.PrecompiledCharsmap == "" {
+		return nil
+	}
+	data, err := base64.StdEncoding.DecodeString(norm.PrecompiledCharsmap)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 // --- Post-processor parsing ---

@@ -84,9 +84,12 @@ func (e *Encoder) encodePieces(text string) []encodedPiece {
 }
 
 // encodeSegment encodes a single text segment (no added token matching).
+// It always normalizes first, then optionally pre-tokenizes into segments.
 func (e *Encoder) encodeSegment(text string) []encodedPiece {
+	normalized := e.normalizer.Normalize(text)
+
 	if e.preTokenize != nil {
-		segments := e.preTokenize(text)
+		segments := e.preTokenize(normalized)
 		var all []encodedPiece
 		for _, seg := range segments {
 			all = append(all, e.model.encode(seg)...)
@@ -94,7 +97,6 @@ func (e *Encoder) encodeSegment(text string) []encodedPiece {
 		return all
 	}
 
-	normalized := e.normalizer.Normalize(text)
 	return e.model.encode(normalized)
 }
 

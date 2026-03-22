@@ -152,6 +152,58 @@ func TestTokenizerJSONPostProcessor(t *testing.T) {
 	}
 }
 
+const t5TokenizerPath = "_testdata/t5_tokenizer.json"
+
+func skipIfNoT5Tokenizer(t testing.TB) {
+	t.Helper()
+	if _, err := os.Stat(t5TokenizerPath); os.IsNotExist(err) {
+		t.Skip("t5_tokenizer.json not found")
+	}
+}
+
+func TestTokenizerJSONUnigramLoad(t *testing.T) {
+	skipIfNoT5Tokenizer(t)
+	tok, err := NewTokenizer(t5TokenizerPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if tok.Model().Type() != ModelTypeUnigram {
+		t.Errorf("type = %d, want Unigram", tok.Model().Type())
+	}
+	if tok.VocabSize() != 1103 {
+		t.Errorf("vocab = %d, want 1103", tok.VocabSize())
+	}
+}
+
+func TestTokenizerJSONUnigramGoldenCases(t *testing.T) {
+	skipIfNoT5Tokenizer(t)
+	tok, err := NewTokenizer(t5TokenizerPath)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	cases := loadGoldenCases(t, "_testdata/golden/t5_test_cases.jsonl")
+	t.Logf("Loaded %d T5 golden cases", len(cases))
+
+	for _, tc := range cases {
+		t.Run(tc.Description, func(t *testing.T) {
+			ids, _ := tok.Encode(tc.Input)
+			if !intSliceEqual(ids, tc.IDs) {
+				if !isEquivalentSegmentation(ids, tc.IDs) {
+					t.Errorf("IDs mismatch for %q:\n  got:  %v\n  want: %v", truncate(tc.Input, 80), ids, tc.IDs)
+				}
+			}
+
+			pieces, _ := tok.EncodeAsPieces(tc.Input)
+			if !stringSliceEqual(pieces, tc.Pieces) {
+				if !isEquivalentStringSegmentation(pieces, tc.Pieces) {
+					t.Errorf("pieces mismatch for %q:\n  got:  %v\n  want: %v", truncate(tc.Input, 80), pieces, tc.Pieces)
+				}
+			}
+		})
+	}
+}
+
 // --- Unit tests for JSON parsing functions (no tokenizer.json needed) ---
 
 func TestLoadFromJSON_InvalidJSON(t *testing.T) {
@@ -437,18 +489,30 @@ func TestParseJSONNormConfig(t *testing.T) {
 	}
 }
 
-func TestHasMetaspacePreTokenizer(t *testing.T) {
-	if !hasMetaspacePreTokenizer(json.RawMessage(`{"type":"Metaspace"}`)) {
+func TestDetectPreTokenizer(t *testing.T) {
+	if detectPreTokenizer(json.RawMessage(`{"type":"Metaspace"}`)) != preTokenizerMetaspace {
 		t.Error("should detect Metaspace")
 	}
-	if hasMetaspacePreTokenizer(json.RawMessage(`{"type":"ByteLevel"}`)) {
-		t.Error("should not detect ByteLevel as Metaspace")
+	if detectPreTokenizer(json.RawMessage(`{"type":"ByteLevel"}`)) != preTokenizerNone {
+		t.Error("should return None for ByteLevel")
 	}
-	if hasMetaspacePreTokenizer(nil) {
-		t.Error("should not detect nil")
+	if detectPreTokenizer(nil) != preTokenizerNone {
+		t.Error("should return None for nil")
 	}
-	if hasMetaspacePreTokenizer(json.RawMessage(`null`)) {
-		t.Error("should not detect null")
+	if detectPreTokenizer(json.RawMessage(`null`)) != preTokenizerNone {
+		t.Error("should return None for null")
+	}
+
+	// Sequence(WhitespaceSplit, Metaspace)
+	seq := `{"type":"Sequence","pretokenizers":[{"type":"WhitespaceSplit"},{"type":"Metaspace"}]}`
+	if detectPreTokenizer(json.RawMessage(seq)) != preTokenizerWhitespaceSplitMetaspace {
+		t.Error("should detect WhitespaceSplit+Metaspace sequence")
+	}
+
+	// Sequence with only one element.
+	seq1 := `{"type":"Sequence","pretokenizers":[{"type":"Metaspace"}]}`
+	if detectPreTokenizer(json.RawMessage(seq1)) != preTokenizerNone {
+		t.Error("should not detect single-element sequence as WhitespaceSplit+Metaspace")
 	}
 }
 
