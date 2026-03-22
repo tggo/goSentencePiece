@@ -16,7 +16,7 @@ Built for running DeBERTa v3 (and other Unigram-based models) in Go services.
 go get github.com/tggo/goSentencePiece
 ```
 
-Requires Go 1.22+.
+Requires Go 1.23+.
 
 ## Quick Start
 
