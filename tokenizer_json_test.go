@@ -5,8 +5,18 @@ import (
 	"testing"
 )
 
+const hfTokenizerPath = "_testdata/tokenizer.json"
+
+func skipIfNoHFTokenizer(t testing.TB) {
+	t.Helper()
+	if _, err := os.Stat(hfTokenizerPath); os.IsNotExist(err) {
+		t.Skip("tokenizer.json not found (run: python _testdata/download_hf_tokenizer.py)")
+	}
+}
+
 func TestTokenizerJSONLoad(t *testing.T) {
-	tok, err := NewTokenizerFromJSON("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(t)
+	tok, err := NewTokenizerFromJSON(hfTokenizerPath)
 	if err != nil {
 		t.Fatalf("load tokenizer.json: %v", err)
 	}
@@ -36,8 +46,9 @@ func TestTokenizerJSONLoad(t *testing.T) {
 }
 
 func TestTokenizerJSONAutoDetect(t *testing.T) {
+	skipIfNoHFTokenizer(t)
 	// NewTokenizer should auto-detect JSON format.
-	tok, err := NewTokenizer("_testdata/tokenizer.json")
+	tok, err := NewTokenizer(hfTokenizerPath)
 	if err != nil {
 		t.Fatalf("auto-detect load: %v", err)
 	}
@@ -57,7 +68,8 @@ func TestTokenizerJSONAutoDetect(t *testing.T) {
 }
 
 func TestTokenizerJSONFromReader(t *testing.T) {
-	f, err := os.Open("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(t)
+	f, err := os.Open(hfTokenizerPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -73,7 +85,8 @@ func TestTokenizerJSONFromReader(t *testing.T) {
 }
 
 func TestTokenizerJSONGoldenCases(t *testing.T) {
-	tok, err := NewTokenizerFromJSON("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(t)
+	tok, err := NewTokenizerFromJSON(hfTokenizerPath)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -116,7 +129,8 @@ func TestTokenizerJSONGoldenCases(t *testing.T) {
 }
 
 func TestTokenizerJSONPostProcessor(t *testing.T) {
-	tok, err := NewTokenizerFromJSON("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(t)
+	tok, err := NewTokenizerFromJSON(hfTokenizerPath)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -140,7 +154,8 @@ func TestTokenizerJSONPostProcessor(t *testing.T) {
 }
 
 func BenchmarkTokenizerJSONLoad(b *testing.B) {
-	data, err := os.ReadFile("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(b)
+	data, err := os.ReadFile(hfTokenizerPath)
 	if err != nil {
 		b.Fatalf("read: %v", err)
 	}
@@ -154,7 +169,8 @@ func BenchmarkTokenizerJSONLoad(b *testing.B) {
 }
 
 func BenchmarkTokenizerJSONEncode(b *testing.B) {
-	tok, err := NewTokenizerFromJSON("_testdata/tokenizer.json")
+	skipIfNoHFTokenizer(b)
+	tok, err := NewTokenizerFromJSON(hfTokenizerPath)
 	if err != nil {
 		b.Fatalf("load: %v", err)
 	}
