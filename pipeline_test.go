@@ -267,6 +267,50 @@ func TestEncodeWithOptions(t *testing.T) {
 	}
 }
 
+func TestEncodeBatch(t *testing.T) {
+	tok, err := NewTokenizer(testModelPath)
+	if err != nil {
+		t.Fatalf("load tokenizer: %v", err)
+	}
+
+	texts := []string{"Hello", "world", ""}
+	results, err := tok.EncodeBatch(texts)
+	if err != nil {
+		t.Fatalf("EncodeBatch: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("len = %d, want 3", len(results))
+	}
+	if len(results[0]) == 0 {
+		t.Error("first result should not be empty")
+	}
+	if results[2] != nil {
+		t.Errorf("empty input should give nil, got %v", results[2])
+	}
+}
+
+func TestGetPiece(t *testing.T) {
+	tok, err := NewTokenizer(testModelPath)
+	if err != nil {
+		t.Fatalf("load tokenizer: %v", err)
+	}
+
+	p := tok.Model().GetPiece(0)
+	if p.Piece == "" {
+		t.Error("GetPiece(0) returned empty piece")
+	}
+
+	// Out of range returns zero Piece.
+	p = tok.Model().GetPiece(-1)
+	if p.Piece != "" {
+		t.Errorf("GetPiece(-1) = %+v, want zero", p)
+	}
+	p = tok.Model().GetPiece(999999)
+	if p.Piece != "" {
+		t.Errorf("GetPiece(999999) = %+v, want zero", p)
+	}
+}
+
 func TestEncodeBatchWithOptions(t *testing.T) {
 	tok, err := NewTokenizer(testModelPath)
 	if err != nil {
