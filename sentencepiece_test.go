@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type goldenCase struct {
@@ -211,13 +213,50 @@ func BenchmarkDecode(b *testing.B) {
 }
 
 func FuzzEncode(f *testing.F) {
-	f.Add("hello world")
-	f.Add("")
-	f.Add("🚀🚀🚀")
-	f.Add("Hello Привіт 你好")
-	f.Add(" ")
-	f.Add("\t\n\r")
-	f.Add("a\x00b")
+	// Rich seed corpus covering diverse inputs.
+	seeds := []string{
+		"hello world",
+		"",
+		"🚀🚀🚀",
+		"Hello Привіт 你好",
+		" ",
+		"\t\n\r",
+		"a\x00b",
+		"The quick brown fox jumps over the lazy dog.",
+		"Україна — держава у Східній Європі.",
+		"東京は日本の首都です。",
+		"مرحبا بالعالم",
+		"สวัสดีครับ",
+		"👨\u200d👩\u200d👧\u200d👦",
+		"https://example.com/path?q=hello&lang=uk",
+		`{"key": "value", "num": 42}`,
+		"func main() { fmt.Println(\"hello\") }",
+		"\u200b\u200b\u200b",
+		"\ufeff",
+		"\u00ad",
+		"a\u0300",
+		"e\u0301",
+		"ＡＢＣ",
+		"①②③",
+		string([]byte{0xC0, 0xAF}),        // overlong UTF-8
+		string([]byte{0xED, 0xA0, 0x80}),  // surrogate half
+		string([]byte{0xF4, 0x90, 0x80}),  // truncated 4-byte
+		"ab\x80cd",                         // invalid continuation
+		"hello\xFFworld",                   // 0xFF byte
+		"\x00\x01\x02\x03\x04\x05",        // low control chars
+		"a" + string(rune(0x10FFFF)) + "b", // max unicode
+		"x\u0300\u0301\u0302\u0303\u0304",  // stacked combiners
+		"   \t\t\n\n   ",                   // only whitespace
+		"<script>alert('xss')</script>",
+		"$1,234,567.89",
+		"SELECT * FROM users;",
+		strings.Repeat("a", 500),
+		strings.Repeat("🔥", 50),
+		strings.Repeat("hello ", 100),
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
 
 	tok, err := NewTokenizer("_testdata/spm.model")
 	if err != nil {
@@ -225,15 +264,132 @@ func FuzzEncode(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, input string) {
+		// 1. Encode must not panic.
 		ids, err := tok.Encode(input)
 		if err != nil {
-			return
+			t.Fatalf("Encode error: %v", err)
 		}
+
+		// 2. EncodeAsPieces must not panic and have same length as IDs.
+		pieces, err := tok.EncodeAsPieces(input)
+		if err != nil {
+			t.Fatalf("EncodeAsPieces error: %v", err)
+		}
+		if len(ids) != len(pieces) {
+			t.Fatalf("ids length %d != pieces length %d", len(ids), len(pieces))
+		}
+
+		// 3. All IDs must be valid (within vocab range).
+		vocabSize := tok.VocabSize()
+		for i, id := range ids {
+			if id < 0 || id >= vocabSize {
+				t.Fatalf("invalid token ID %d at position %d (vocab size %d)", id, i, vocabSize)
+			}
+		}
+
+		// 4. Decode must not panic.
 		decoded, err := tok.Decode(ids)
 		if err != nil {
-			t.Fatalf("decode error: %v", err)
+			t.Fatalf("Decode error: %v", err)
 		}
 		_ = decoded
+
+		// 5. Re-encoding the decoded output must not panic.
+		ids2, err := tok.Encode(decoded)
+		if err != nil {
+			t.Fatalf("re-Encode error: %v", err)
+		}
+		_ = ids2
+
+		// 6. Decode of re-encoded must produce same decode on second round
+		//    (idempotency after two rounds of normalization).
+		//    Note: first decode may differ from second due to NFKC composition
+		//    (e.g., A + combining grave → À), but second round must be stable.
+		if utf8.ValidString(input) {
+			decoded2, err := tok.Decode(ids2)
+			if err != nil {
+				t.Fatalf("re-Decode error: %v", err)
+			}
+			// Third round to check stability.
+			ids3, _ := tok.Encode(decoded2)
+			decoded3, _ := tok.Decode(ids3)
+			if decoded2 != decoded3 {
+				t.Errorf("decode not stable after 2 rounds:\n  round2: %q\n  round3: %q", decoded2, decoded3)
+			}
+		}
+	})
+}
+
+func FuzzDecode(f *testing.F) {
+	tok, err := NewTokenizer("_testdata/spm.model")
+	if err != nil {
+		f.Fatalf("load model: %v", err)
+	}
+
+	vocabSize := tok.VocabSize()
+
+	// Seed with known valid ID sequences.
+	f.Add([]byte{0, 0, 0, 1}) // single token ID=1
+	f.Add([]byte{0, 0, 1, 0xFB, 0, 0, 1, 0xFC}) // two IDs
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		// Interpret data as a sequence of uint16 token IDs.
+		if len(data) < 2 {
+			return
+		}
+		n := len(data) / 2
+		if n > 200 { // cap length to avoid slow tests
+			n = 200
+		}
+		ids := make([]int, n)
+		for i := 0; i < n; i++ {
+			ids[i] = int(data[i*2])<<8 | int(data[i*2+1])
+			// Clamp to valid range.
+			ids[i] = ids[i] % vocabSize
+		}
+
+		// Decode must not panic.
+		decoded, err := tok.Decode(ids)
+		if err != nil {
+			t.Fatalf("Decode error: %v", err)
+		}
+		_ = decoded
+	})
+}
+
+func FuzzNormalize(f *testing.F) {
+	tok, err := NewTokenizer("_testdata/spm.model")
+	if err != nil {
+		f.Fatalf("load model: %v", err)
+	}
+	normalizer := NewNormalizer(tok.model)
+
+	f.Add("hello world")
+	f.Add("")
+	f.Add("\x00\x01\x02")
+	f.Add("ＡＢＣ")
+	f.Add("\u200b\u200b")
+
+	f.Fuzz(func(t *testing.T, input string) {
+		// Normalize must not panic.
+		result := normalizer.Normalize(input)
+
+		// Result must be valid UTF-8 (if input was).
+		if !utf8.ValidString(result) && utf8.ValidString(input) {
+			t.Errorf("Normalize produced invalid UTF-8 for valid input %q", input)
+		}
+
+		// Check normalization stability: applying normalize twice to the
+		// result should give a stable output.
+		// Note: first normalize may compose combining characters differently,
+		// but the second round must be stable.
+		if utf8.ValidString(input) {
+			result2 := normalizer.Normalize(result)
+			result3 := normalizer.Normalize(result2)
+			if result2 != result3 {
+				t.Errorf("Normalize not stable after 2 rounds:\n  round2: %q\n  round3: %q", result2, result3)
+			}
+		}
 	})
 }
 
