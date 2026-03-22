@@ -12,14 +12,31 @@ import (
 type Encoder struct {
 	model      *Model
 	normalizer *Normalizer
+
+	// preTokenize, when set, replaces the default normalization pipeline.
+	// It receives raw input text and returns pre-tokenized segments that
+	// are each encoded independently. Used by HuggingFace tokenizer.json
+	// loaders for Metaspace pre-tokenization.
+	preTokenize func(string) []string
+
+	// addedTokens, when set, is a trie of added tokens that are matched
+	// and extracted from input text before normalization/BPE. This
+	// implements HuggingFace's added_tokens matching behavior.
+	addedTokens *ByteTrie
+
+	// stripLeadingSpace controls whether Decode strips the leading space
+	// added by the normalizer. True for SentencePiece models (default),
+	// false for HuggingFace tokenizer.json models.
+	stripLeadingSpace bool
 }
 
 // NewEncoder creates a new Encoder for the given model, initializing the
 // normalizer from the model's NormalizerSpec configuration.
 func NewEncoder(model *Model) *Encoder {
 	return &Encoder{
-		model:      model,
-		normalizer: NewNormalizer(model),
+		model:             model,
+		normalizer:        NewNormalizer(model),
+		stripLeadingSpace: model.addDummyPrefix,
 	}
 }
 
@@ -30,8 +47,7 @@ func (e *Encoder) Encode(text string) []int {
 		return nil
 	}
 
-	normalized := e.normalizer.Normalize(text)
-	pieces := e.mergeConsecutiveUnk(e.model.encode(normalized))
+	pieces := e.mergeConsecutiveUnk(e.encodePieces(text))
 
 	ids := make([]int, len(pieces))
 	for i, p := range pieces {
@@ -48,8 +64,7 @@ func (e *Encoder) EncodeAsPieces(text string) []string {
 		return nil
 	}
 
-	normalized := e.normalizer.Normalize(text)
-	pieces := e.mergeConsecutiveUnk(e.model.encode(normalized))
+	pieces := e.mergeConsecutiveUnk(e.encodePieces(text))
 
 	result := make([]string, len(pieces))
 	for i, p := range pieces {
@@ -57,6 +72,104 @@ func (e *Encoder) EncodeAsPieces(text string) []string {
 	}
 
 	return result
+}
+
+// encodePieces runs the normalization/pre-tokenization and encoding pipeline.
+func (e *Encoder) encodePieces(text string) []encodedPiece {
+	// If added tokens are configured, match and split them out first.
+	if e.addedTokens != nil {
+		return e.encodeWithAddedTokens(text)
+	}
+	return e.encodeSegment(text)
+}
+
+// encodeSegment encodes a single text segment (no added token matching).
+func (e *Encoder) encodeSegment(text string) []encodedPiece {
+	if e.preTokenize != nil {
+		segments := e.preTokenize(text)
+		var all []encodedPiece
+		for _, seg := range segments {
+			all = append(all, e.model.encode(seg)...)
+		}
+		return all
+	}
+
+	normalized := e.normalizer.Normalize(text)
+	return e.model.encode(normalized)
+}
+
+// encodeWithAddedTokens splits text on added tokens, encodes each non-added
+// segment normally, and interleaves the results.
+func (e *Encoder) encodeWithAddedTokens(text string) []encodedPiece {
+	// Split the text into segments: alternating regular text and added tokens.
+	segments := e.splitOnAddedTokens(text)
+
+	var result []encodedPiece
+	for _, seg := range segments {
+		if seg.id >= 0 {
+			result = append(result, encodedPiece{id: seg.id, piece: seg.text})
+		} else {
+			result = append(result, e.encodeSegment(seg.text)...)
+		}
+	}
+	return result
+}
+
+type textSegment struct {
+	text string
+	id   int // >= 0 for added tokens, -1 for regular text
+}
+
+// splitOnAddedTokens scans text left-to-right, greedily matching added tokens
+// (longest match wins). Returns segments of regular text (id=-1) and matched
+// added tokens (id=token ID).
+func (e *Encoder) splitOnAddedTokens(text string) []textSegment {
+	var segments []textSegment
+	regularStart := 0
+
+	for i := 0; i < len(text); {
+		matchLen, matchID := e.longestAddedToken(text[i:])
+		if matchLen > 0 {
+			// Flush any regular text before this match.
+			if i > regularStart {
+				segments = append(segments, textSegment{text: text[regularStart:i], id: -1})
+			}
+			segments = append(segments, textSegment{text: text[i : i+matchLen], id: matchID})
+			i += matchLen
+			regularStart = i
+		} else {
+			i++
+		}
+	}
+
+	// Flush remaining regular text.
+	if regularStart < len(text) {
+		segments = append(segments, textSegment{text: text[regularStart:], id: -1})
+	}
+
+	return segments
+}
+
+// longestAddedToken finds the longest added token match at the start of text.
+// Returns (matchLength, tokenID) or (0, 0) if no match.
+func (e *Encoder) longestAddedToken(text string) (int, int) {
+	node := e.addedTokens
+	bestLen := 0
+	bestID := 0
+
+	for i := 0; i < len(text); i++ {
+		var ret int
+		node, ret = node.Traverse(text[i])
+		if ret == -2 {
+			break
+		}
+		if ret >= 0 {
+			bestLen = i + 1
+			bestID = ret
+		}
+	}
+
+	return bestLen, bestID
 }
 
 // mergeConsecutiveUnk merges consecutive UNK pieces into a single piece.
@@ -142,7 +255,7 @@ func (e *Encoder) Decode(ids []int) string {
 	result := buf.String()
 
 	// Remove leading space that was added by the normalizer.
-	if e.model.addDummyPrefix && len(result) > 0 && result[0] == ' ' {
+	if e.stripLeadingSpace && len(result) > 0 && result[0] == ' ' {
 		result = result[1:]
 	}
 

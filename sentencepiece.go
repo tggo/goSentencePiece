@@ -4,7 +4,11 @@
 // requiring CGo or external dependencies.
 package sentencepiece
 
-import "io"
+import (
+	"fmt"
+	"io"
+	"os"
+)
 
 // Tokenizer is the top-level SentencePiece tokenizer. It wraps a loaded model
 // and encoder, providing methods for encoding text to token IDs, decoding IDs
@@ -19,34 +23,65 @@ type Tokenizer struct {
 	truncation *TruncationParams
 }
 
-// NewTokenizer creates a new Tokenizer by loading a SentencePiece .model file
-// from the given file path. It returns an error if the file cannot be read or
-// the protobuf data cannot be parsed.
-func NewTokenizer(modelPath string) (*Tokenizer, error) {
-	model, err := LoadModel(modelPath)
+// NewTokenizer creates a new Tokenizer by loading a model file from the given
+// path. It auto-detects the format: HuggingFace tokenizer.json (if the file
+// starts with '{') or SentencePiece protobuf .model (otherwise).
+func NewTokenizer(path string) (*Tokenizer, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read model file: %w", err)
+	}
+
+	if isJSON(data) {
+		return loadFromJSON(data)
+	}
+
+	model, err := loadModelFromBytes(data)
 	if err != nil {
 		return nil, err
 	}
-
 	return &Tokenizer{
 		model:   model,
 		encoder: NewEncoder(model),
 	}, nil
 }
 
-// NewTokenizerFromReader creates a new Tokenizer by reading a SentencePiece
-// .model from the provided io.Reader. This is useful for loading models from
-// embedded files, HTTP responses, or any other non-file source.
+// NewTokenizerFromReader creates a new Tokenizer by reading a model from the
+// provided io.Reader. It auto-detects the format: HuggingFace tokenizer.json
+// or SentencePiece protobuf .model.
 func NewTokenizerFromReader(r io.Reader) (*Tokenizer, error) {
-	model, err := LoadModelFromReader(r)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read model data: %w", err)
+	}
+
+	if isJSON(data) {
+		return loadFromJSON(data)
+	}
+
+	model, err := loadModelFromBytes(data)
 	if err != nil {
 		return nil, err
 	}
-
 	return &Tokenizer{
 		model:   model,
 		encoder: NewEncoder(model),
 	}, nil
+}
+
+// isJSON reports whether data starts with a JSON object ('{').
+func isJSON(data []byte) bool {
+	for _, b := range data {
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '{':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 // Encode tokenizes the input text using Unigram Viterbi decoding and returns
@@ -193,8 +228,7 @@ func (t *Tokenizer) encodeToEncoding(text string) *Encoding {
 		return newEncoding(nil, nil)
 	}
 
-	normalized := t.encoder.normalizer.Normalize(text)
-	pieces := t.encoder.mergeConsecutiveUnk(t.model.encode(normalized))
+	pieces := t.encoder.mergeConsecutiveUnk(t.encoder.encodePieces(text))
 
 	ids := make([]int, len(pieces))
 	tokens := make([]string, len(pieces))

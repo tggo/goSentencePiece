@@ -28,4 +28,7 @@ coverage.out
 # Embed example model (copy from _testdata/spm.model before running)
 examples/embed/spm.model
 
+# Large test model (downloaded via _testdata/download_hf_tokenizer.py)
+_testdata/tokenizer.json
+
 ./tmp

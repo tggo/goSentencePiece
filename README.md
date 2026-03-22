@@ -60,10 +60,12 @@ func main() {
 
 - **Pure Go** -- zero CGo, zero Rust FFI, zero external C libraries
 - **Byte-identical** to the reference C++ implementation (validated against 5155 golden test cases)
+- **Dual format** -- loads both SentencePiece `.model` (protobuf) and HuggingFace `tokenizer.json`
 - **Unigram model** with Viterbi decoding
 - **BPE model** with greedy best-first merging
 - **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
 - **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
+- **Metaspace pre-tokenization** for HuggingFace tokenizer.json models
 - **ML pipeline** -- post-processing, padding, truncation, attention masks
 - **Batch encoding** -- encode multiple texts with automatic padding
 - **ONNX-ready** -- produces `input_ids`, `attention_mask`, `token_type_ids` tensors
@@ -77,11 +79,15 @@ func main() {
 ### Tokenizer
 
 ```go
-// Create from file path
-func NewTokenizer(modelPath string) (*Tokenizer, error)
+// Create from file path (auto-detects .model or tokenizer.json format)
+func NewTokenizer(path string) (*Tokenizer, error)
 
-// Create from io.Reader (embedded files, HTTP responses, etc.)
+// Create from io.Reader (auto-detects format)
 func NewTokenizerFromReader(r io.Reader) (*Tokenizer, error)
+
+// Create from HuggingFace tokenizer.json explicitly
+func NewTokenizerFromJSON(path string) (*Tokenizer, error)
+func NewTokenizerFromJSONReader(r io.Reader) (*Tokenizer, error)
 
 // Encode text to token IDs
 func (t *Tokenizer) Encode(text string) ([]int, error)
@@ -149,17 +155,18 @@ func (m *Model) PadID() int
 
 ## Supported Models
 
-Any SentencePiece `.model` file that uses **Unigram** or **BPE** model type.
+Any SentencePiece `.model` file (protobuf) or HuggingFace `tokenizer.json` that uses **Unigram** or **BPE** model type.
 
-**Unigram** (tested):
-- `microsoft/deberta-v3-small` / `base` / `large`
-- Other Unigram models (XLNet, ALBERT, T5, etc.) should work
+**SentencePiece .model (protobuf):**
+- `microsoft/deberta-v3-small` / `base` / `large` (Unigram)
+- `google/gemma-3-1b-it` (BPE, 256K vocab)
+- Other Unigram/BPE SentencePiece models (XLNet, ALBERT, T5, LLaMA, Mistral, etc.)
 
-**BPE** (tested):
-- `google/gemma-3-1b-it` (256K vocab)
-- Other BPE SentencePiece models (LLaMA, Mistral, etc.) should work
+**HuggingFace tokenizer.json:**
+- `onnx-community/mmBERT-small-ONNX` (BPE, 256K vocab)
+- Other BPE/Unigram tokenizer.json models with Metaspace pre-tokenizer
 
-**Note:** WORD and CHAR model types are not supported.
+**Note:** WORD and CHAR model types are not supported. ByteLevel pre-tokenizer (GPT-2/RoBERTa) is not yet supported.
 
 ## Benchmarks
 
@@ -211,6 +218,7 @@ cat file.txt | go run ./examples/benchmark _testdata/spm.model
 ```
 sentencepiece.go    -- public Tokenizer type, pipeline, constructors
 model.go            -- protobuf loading, vocab index, ByteTrie
+tokenizer_json.go   -- HuggingFace tokenizer.json loading
 normalizer.go       -- precompiled charsmap (Darts trie), NFKC, whitespace
 unigram.go          -- Viterbi decoding (forward DP + backtrack)
 bpe.go              -- BPE greedy merge with priority queue
