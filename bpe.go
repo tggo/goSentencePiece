@@ -15,8 +15,8 @@ type bpeSymbol struct {
 	freeze bool
 }
 
-func (s bpeSymbol) len() int      { return s.end - s.start }
-func (s bpeSymbol) empty() bool   { return s.start == s.end }
+func (s bpeSymbol) len() int              { return s.end - s.start }
+func (s bpeSymbol) empty() bool           { return s.start == s.end }
 func (s bpeSymbol) slice(n string) string { return n[s.start:s.end] }
 
 // bpeSymbolPair is a candidate merge of two adjacent symbols.
