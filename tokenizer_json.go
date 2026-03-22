@@ -100,16 +100,7 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedModel, tj.Model.Type)
 	}
 
-	var pieces []Piece
-	var pieceIndex map[string]int
-	var err error
-
-	switch modelType {
-	case ModelTypeBPE:
-		pieces, pieceIndex, err = parseBPEVocab(tj.Model.Vocab)
-	case ModelTypeUnigram:
-		pieces, pieceIndex, err = parseUnigramVocab(tj.Model.Vocab)
-	}
+	pieces, pieceIndex, err := parseJSONVocab(modelType, tj.Model.Vocab)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +113,6 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 		}
 	}
 
-	unkID := resolveUnkID(tj, pieceIndex)
-	bosID := resolveTokenID(tj.AddedTokens, pieceIndex, "<bos>")
-	eosID := resolveTokenID(tj.AddedTokens, pieceIndex, "<eos>")
-	padID := resolveTokenID(tj.AddedTokens, pieceIndex, "<pad>")
-
 	// Normalizer config is only used as fallback when the Metaspace
 	// pre-tokenizer is not active (the Metaspace path bypasses the
 	// SentencePiece normalizer entirely via encoder.preTokenize).
@@ -136,23 +122,41 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 		modelType:             modelType,
 		pieces:                pieces,
 		pieceIndex:            pieceIndex,
-		unkID:                 unkID,
-		bosID:                 bosID,
-		eosID:                 eosID,
-		padID:                 padID,
+		unkID:                 resolveUnkID(tj, pieceIndex),
+		bosID:                 resolveTokenID(tj.AddedTokens, pieceIndex, "<bos>"),
+		eosID:                 resolveTokenID(tj.AddedTokens, pieceIndex, "<eos>"),
+		padID:                 resolveTokenID(tj.AddedTokens, pieceIndex, "<pad>"),
 		byteFallback:          tj.Model.ByteFallback,
 		addDummyPrefix:        addDummy,
 		escapeWhitespaces:     escapeSp,
 		removeExtraWhitespace: false,
 	}
 
+	buildModelTrie(m)
+	computeMinMaxScores(m)
+
+	return m, nil
+}
+
+func parseJSONVocab(modelType ModelType, raw json.RawMessage) ([]Piece, map[string]int, error) {
+	switch modelType {
+	case ModelTypeBPE:
+		return parseBPEVocab(raw)
+	default:
+		return parseUnigramVocab(raw)
+	}
+}
+
+func buildModelTrie(m *Model) {
 	m.vocabTrie = NewByteTrie()
 	for i, p := range m.pieces {
 		if p.Type == PieceNormal || p.Type == PieceUserDefined {
 			m.vocabTrie.Insert(p.Piece, i)
 		}
 	}
+}
 
+func computeMinMaxScores(m *Model) {
 	m.minScoreVal = float32(math.MaxFloat32)
 	m.maxScoreVal = -float32(math.MaxFloat32)
 	for _, p := range m.pieces {
@@ -165,8 +169,6 @@ func buildModelFromJSON(tj *tokenizerJSON) (*Model, error) {
 			}
 		}
 	}
-
-	return m, nil
 }
 
 func parseBPEVocab(raw json.RawMessage) ([]Piece, map[string]int, error) {
