@@ -540,13 +540,13 @@ func TestCoverageGaps(t *testing.T) {
 			{"<0x41>", true},
 			{"<0xff>", true},
 			{"<0x0A>", true},
-			{"short", false},     // wrong length
-			{"toolong", false},   // wrong length
-			{"X0x41>", false},    // wrong prefix char 0
-			{"<1x41>", false},    // wrong prefix char 1
-			{"<00x41>", false},   // wrong length (7 chars)
-			{"<0x41X", false},    // wrong suffix
-			{"<0y41>", false},    // wrong prefix char 2
+			{"short", false},   // wrong length
+			{"toolong", false}, // wrong length
+			{"X0x41>", false},  // wrong prefix char 0
+			{"<1x41>", false},  // wrong prefix char 1
+			{"<00x41>", false}, // wrong length (7 chars)
+			{"<0x41X", false},  // wrong suffix
+			{"<0y41>", false},  // wrong prefix char 2
 		}
 		for _, tt := range tests {
 			got := pieceIsByte(tt.piece)
