@@ -3,7 +3,7 @@
 [![CI](https://github.com/tggo/goSentencePiece/actions/workflows/ci.yml/badge.svg)](https://github.com/tggo/goSentencePiece/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tggo/goSentencePiece.svg)](https://pkg.go.dev/github.com/tggo/goSentencePiece)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tggo/goSentencePiece)](https://goreportcard.com/report/github.com/tggo/goSentencePiece)
-[![Coverage](https://img.shields.io/badge/coverage-84.9%25-brightgreen)](https://github.com/tggo/goSentencePiece)
+[![Coverage](https://img.shields.io/badge/coverage-97.4%25-brightgreen)](https://github.com/tggo/goSentencePiece)
 
 Pure Go implementation of the [SentencePiece](https://github.com/google/sentencepiece) Unigram tokenizer. Produces **byte-identical output** to the C++ / Python `sentencepiece` library -- no CGo, no Rust FFI, no external C libraries.
 
