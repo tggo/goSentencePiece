@@ -1,2 +1,4 @@
 proto/sentencepiece_model.pb.go linguist-generated=true
 _testdata/golden/test_cases.jsonl linguist-generated=true
+_testdata/golden/bpe_test_cases.jsonl linguist-generated=true
+_testdata/*.py linguist-vendored=true
