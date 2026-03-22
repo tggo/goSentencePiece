@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Embedding a SentencePiece model in the binary using go:embed.
 //
 // Before running, copy your model file here:
@@ -6,7 +8,7 @@
 //
 // Then run:
 //
-//	go run ./examples/embed
+//	go run ./examples/embed/main.go
 package main
 
 import (
