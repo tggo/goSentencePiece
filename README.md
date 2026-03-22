@@ -158,6 +158,19 @@ make bench
 .venv/bin/python _testdata/bench_python.py
 ```
 
+## Examples
+
+The [examples/](examples/) directory contains runnable programs:
+
+| Example | Description |
+|---------|-------------|
+| `basic` | Encode, decode, batch encode, vocab metadata |
+| `embed` | Load model from `go:embed` binary data |
+
+```bash
+go run ./examples/basic _testdata/spm.model
+```
+
 ## Project Structure
 
 ```
@@ -167,8 +180,10 @@ normalizer.go       -- precompiled charsmap (Darts trie), NFKC, whitespace
 unigram.go          -- Viterbi decoding (forward DP + backtrack)
 encoder.go          -- Encode/Decode with byte-token handling
 byte_fallback.go    -- <0xHH> token encoding/decoding
+errors.go           -- sentinel error types
 trie.go             -- ByteTrie (vocab), DartsDoubleArray (charsmap)
 proto/              -- generated protobuf code
+examples/           -- runnable example programs
 _testdata/          -- test model and golden test cases
 ```
 
