@@ -5,8 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-const metaSpaceRune = '\u2581' // ▁ LOWER ONE EIGHTH BLOCK
-const metaSpace = "▁"
+const metaSpace = "▁" // U+2581 LOWER ONE EIGHTH BLOCK
 
 // Normalizer handles text normalization according to the model's NormalizerSpec.
 // It applies the precompiled character map (Darts double-array trie encoding
