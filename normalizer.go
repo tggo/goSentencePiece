@@ -3,8 +3,6 @@ package sentencepiece
 import (
 	"strings"
 	"unicode/utf8"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 const metaSpaceRune = '\u2581' // ▁ LOWER ONE EIGHTH BLOCK
@@ -169,13 +167,14 @@ func (n *Normalizer) normalizePrefix(input []byte) (int, string) {
 		}
 	}
 
-	// No match: consume one Unicode character, NFKC normalize it.
+	// No match: consume one Unicode character, pass through as-is.
+	// The charsmap already contains all NFKC mappings, so unmatched
+	// chars should not be NFKC-normalized again.
 	r, size := utf8.DecodeRune(input)
 	if r == utf8.RuneError && size <= 1 {
 		// Invalid UTF-8: replace with U+FFFD.
 		return 1, "\uFFFD"
 	}
 
-	normalized := norm.NFKC.String(string(input[:size]))
-	return size, normalized
+	return size, string(input[:size])
 }
