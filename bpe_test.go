@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestBPEGoldenCases(t *testing.T) {
@@ -84,6 +86,64 @@ func BenchmarkBPEEncode(b *testing.B) {
 		text := "The quick brown fox jumps over the lazy dog. This is a medium length string."
 		for i := 0; i < b.N; i++ {
 			tok.Encode(text)
+		}
+	})
+}
+
+func FuzzBPEEncode(f *testing.F) {
+	seeds := []string{
+		"hello world", "", "🚀🚀🚀", "Hello Привіт 你好",
+		" ", "\t\n\r", "a\x00b", "The quick brown fox.",
+		"Україна — держава.", "東京は日本の首都です。",
+		"مرحبا", "👨\u200d👩\u200d👧\u200d👦", "🇺🇦",
+		"func main() { fmt.Println(\"hello\") }",
+		strings.Repeat("a", 500),
+		strings.Repeat("🔥", 50),
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	tok, err := NewTokenizer("_testdata/bpe.model")
+	if err != nil {
+		f.Fatalf("load model: %v", err)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		ids, err := tok.Encode(input)
+		if err != nil {
+			t.Fatalf("Encode error: %v", err)
+		}
+
+		pieces, err := tok.EncodeAsPieces(input)
+		if err != nil {
+			t.Fatalf("EncodeAsPieces error: %v", err)
+		}
+		if len(ids) != len(pieces) {
+			t.Fatalf("ids len %d != pieces len %d", len(ids), len(pieces))
+		}
+
+		vocabSize := tok.VocabSize()
+		for i, id := range ids {
+			if id < 0 || id >= vocabSize {
+				t.Fatalf("invalid token ID %d at pos %d", id, i)
+			}
+		}
+
+		decoded, err := tok.Decode(ids)
+		if err != nil {
+			t.Fatalf("Decode error: %v", err)
+		}
+		_ = decoded
+
+		if utf8.ValidString(input) {
+			ids2, _ := tok.Encode(decoded)
+			decoded2, _ := tok.Decode(ids2)
+			ids3, _ := tok.Encode(decoded2)
+			decoded3, _ := tok.Decode(ids3)
+			if decoded2 != decoded3 {
+				t.Errorf("BPE decode not stable after 2 rounds:\n  round2: %q\n  round3: %q", decoded2, decoded3)
+			}
 		}
 	})
 }
