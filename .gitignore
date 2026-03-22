@@ -1,0 +1,26 @@
+# Python venv
+.venv/
+
+# Reference C++ sources (cloned for analysis, not part of the project)
+sources/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go build
+*.exe
+*.test
+*.out
+
+# Fuzz corpus/cache
+testdata/fuzz/
+
+# SentencePiece model binary (large, download via make)
+_testdata/spm.model
