@@ -220,3 +220,15 @@ func (m *Model) EosID() int { return m.eosID }
 
 // PadID returns the vocabulary ID of the padding token (-1 if not set).
 func (m *Model) PadID() int { return m.padID }
+
+// Type returns the model type (ModelTypeUnigram or ModelTypeBPE).
+func (m *Model) Type() ModelType { return m.modelType }
+
+// GetPiece returns the full Piece metadata (string, score, type) for the given
+// vocabulary ID. It returns a zero Piece if the ID is out of range.
+func (m *Model) GetPiece(id int) Piece {
+	if id < 0 || id >= len(m.pieces) {
+		return Piece{}
+	}
+	return m.pieces[id]
+}
