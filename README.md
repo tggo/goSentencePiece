@@ -64,10 +64,11 @@ func main() {
 - **BPE model** with greedy best-first merging
 - **Byte fallback** (`<0xHH>` tokens) for characters not in vocabulary
 - **Precompiled charsmap** normalization via Darts double-array trie (NFKC + custom rules)
-- **Batch encoding** -- encode multiple texts in a single call
+- **ML pipeline** -- post-processing, padding, truncation, attention masks
+- **Batch encoding** -- encode multiple texts with automatic padding
+- **ONNX-ready** -- produces `input_ids`, `attention_mask`, `token_type_ids` tensors
 - **go:embed support** -- load models from embedded files with `NewTokenizerFromReader`
 - **Typed errors** -- sentinel errors for invalid or unsupported models
-- **io.Reader support** -- load models from embedded files, HTTP responses, or any reader
 - **Fast** -- see benchmarks below
 - Zero runtime dependencies beyond stdlib + `google.golang.org/protobuf`
 
@@ -102,6 +103,27 @@ func (t *Tokenizer) VocabSize() int
 
 // Access the underlying model
 func (t *Tokenizer) Model() *Model
+
+// Pipeline configuration (builder pattern)
+func (t *Tokenizer) WithPostProcessor(pp PostProcessor) *Tokenizer
+func (t *Tokenizer) WithTruncation(params *TruncationParams) *Tokenizer
+func (t *Tokenizer) WithPadding(params *PaddingParams) *Tokenizer
+
+// Full encoding with metadata (post-processing + truncation + padding)
+func (t *Tokenizer) EncodeWithOptions(text string, addSpecialTokens bool) *Encoding
+func (t *Tokenizer) EncodeBatchWithOptions(texts []string, addSpecialTokens bool) []*Encoding
+```
+
+### Encoding
+
+```go
+type Encoding struct {
+    IDs               []int    // Token IDs
+    Tokens            []string // String pieces
+    AttentionMask     []int    // 1 for real tokens, 0 for padding
+    TypeIDs           []int    // Segment IDs (0 for first, 1 for second)
+    SpecialTokensMask []int    // 1 for special tokens, 0 for normal
+}
 ```
 
 ### Model
@@ -169,25 +191,31 @@ The [examples/](examples/) directory contains runnable programs:
 |---------|-------------|
 | `basic` | Encode, decode, batch encode, vocab metadata |
 | `embed` | Load model from `go:embed` binary data |
+| `mmbert` | mmBERT-small ONNX inference prep with full pipeline |
 
 ```bash
 go run ./examples/basic _testdata/spm.model
+go run ./examples/mmbert _testdata/bpe.model
 ```
 
 ## Project Structure
 
 ```
-sentencepiece.go    -- public Tokenizer type and constructors
+sentencepiece.go    -- public Tokenizer type, pipeline, constructors
 model.go            -- protobuf loading, vocab index, ByteTrie
 normalizer.go       -- precompiled charsmap (Darts trie), NFKC, whitespace
 unigram.go          -- Viterbi decoding (forward DP + backtrack)
 bpe.go              -- BPE greedy merge with priority queue
 encoder.go          -- Encode/Decode with byte-token handling
+encoding.go         -- Encoding struct (IDs, masks, offsets)
+postprocessor.go    -- PostProcessor interface, template processing
+padding.go          -- Padding (right/left, fixed/batch-longest)
+truncation.go       -- Truncation to max length
 byte_fallback.go    -- <0xHH> token encoding/decoding
 errors.go           -- sentinel error types
 trie.go             -- ByteTrie (vocab), DartsDoubleArray (charsmap)
 proto/              -- generated protobuf code
-examples/           -- runnable example programs
+examples/           -- runnable examples (basic, embed, mmbert)
 _testdata/          -- test models and golden test cases
 ```
 

@@ -28,4 +28,4 @@ coverage.out
 # Embed example model (copy from _testdata/spm.model before running)
 examples/embed/spm.model
 
-./tmp 
+./tmp

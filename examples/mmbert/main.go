@@ -1,21 +1,21 @@
 // Preparing inputs for mmBERT-small (jhu-clsp/mmBERT-small) ONNX inference
-// using the Gemma 2 tokenizer.
+// using the Gemma tokenizer.
 //
 // mmBERT-small is a ModernBERT-based multilingual encoder that uses the
-// Gemma 2 tokenizer (256K vocab, BPE). This example shows how to tokenize
-// text and prepare the three tensors needed for ONNX inference:
-//   - input_ids:      token IDs with [CLS] and [SEP] special tokens
-//   - attention_mask:  1 for real tokens, 0 for padding
-//   - token_type_ids:  0 for all tokens (single-sequence input)
+// Gemma tokenizer (256K vocab, BPE). This example shows how to:
 //
-// Download the tokenizer model:
+//  1. Load the SentencePiece tokenizer model
+//  2. Configure the pipeline (post-processing, truncation, padding)
+//  3. Tokenize text into ONNX-ready tensors (input_ids, attention_mask, token_type_ids)
 //
-//	wget -O tmp/gemma-2-2b-tokenizer.model \
-//	  https://huggingface.co/google/gemma-2-2b/resolve/main/tokenizer.model
+// The tokenizer model is the Gemma SentencePiece model. Download it from:
 //
-// Run:
+//	# Requires HuggingFace auth (Gemma license agreement)
+//	huggingface-cli download google/gemma-3-1b-it tokenizer.model --local-dir tmp
 //
-//	go run ./examples/mmbert tmp/gemma-2-2b-tokenizer.model
+// Or use the test model shipped with goSentencePiece:
+//
+//	go run ./examples/mmbert _testdata/bpe.model
 package main
 
 import (
@@ -26,90 +26,88 @@ import (
 	sp "github.com/tggo/goSentencePiece"
 )
 
+const maxLen = 32
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s <tokenizer.model>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "usage: %s <tokenizer.model>\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Download the Gemma tokenizer model:\n")
+		fmt.Fprintf(os.Stderr, "  huggingface-cli download google/gemma-3-1b-it tokenizer.model --local-dir tmp\n\n")
+		fmt.Fprintf(os.Stderr, "Or use the test model:\n")
+		fmt.Fprintf(os.Stderr, "  go run ./examples/mmbert _testdata/bpe.model\n")
 		os.Exit(1)
 	}
 
+	// ── Step 1: Load tokenizer ─────────────────────────────────────
 	tok, err := sp.NewTokenizer(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	m := tok.Model()
-	fmt.Println("Vocab size:", tok.VocabSize())
-	fmt.Println("BOS (CLS):", m.BosID(), " →", m.IdToPiece(m.BosID()))
-	fmt.Println("EOS (SEP):", m.EosID(), " →", m.IdToPiece(m.EosID()))
-	fmt.Println("PAD:      ", m.PadID(), " →", m.IdToPiece(m.PadID()))
-	fmt.Println("UNK:      ", m.UnkID(), " →", m.IdToPiece(m.UnkID()))
-	fmt.Println("MASK:     ", m.PieceToId("<mask>"))
-	fmt.Println()
 
-	// --- Single text encoding ---
+	// Resolve pad ID: Gemma has pad_id=-1 (not set), mmBERT uses 0 (<pad>).
+	padID := m.PadID()
+	if padID < 0 {
+		padID = m.PieceToId("<pad>")
+	}
+
+	fmt.Println("=== mmBERT-small tokenizer (Gemma) ===")
+	fmt.Printf("Vocab: %d | BOS(CLS): %d | EOS(SEP): %d | PAD: %d\n\n",
+		tok.VocabSize(), m.BosID(), m.EosID(), padID)
+
+	// ── Step 2: Configure the pipeline ─────────────────────────────
+	// mmBERT uses BERT-style inputs: [BOS] tokens [EOS] + padding
+	tok.
+		WithPostProcessor(sp.BertStylePostProcessor(m.BosID(), m.EosID())).
+		WithTruncation(&sp.TruncationParams{MaxLength: maxLen}).
+		WithPadding(&sp.PaddingParams{
+			Strategy:  sp.PadToMaxLength,
+			Direction: sp.PadRight,
+			MaxLength: maxLen,
+			PadID:     padID,
+		})
+
+	// ── Step 3: Single text → ONNX tensors ─────────────────────────
 	text := "The quick brown fox jumps over the lazy dog."
-	inputIDs, attentionMask, tokenTypeIDs := encodeForBERT(tok, text, 32)
+	enc := tok.EncodeWithOptions(text, true)
 
 	fmt.Printf("Text:           %q\n", text)
-	fmt.Printf("input_ids:      %v\n", inputIDs)
-	fmt.Printf("attention_mask: %v\n", attentionMask)
-	fmt.Printf("token_type_ids: %v\n", tokenTypeIDs)
+	fmt.Printf("Tokens:         %v\n", enc.Tokens)
+	fmt.Printf("input_ids:      %v\n", enc.IDs)
+	fmt.Printf("attention_mask: %v\n", enc.AttentionMask)
+	fmt.Printf("token_type_ids: %v\n", enc.TypeIDs)
 	fmt.Println()
 
-	// --- Decode back (strips control tokens automatically) ---
-	decoded, _ := tok.Decode(inputIDs)
-	fmt.Printf("Decoded:        %q\n", decoded)
-	fmt.Println()
+	// Decode back (strips control tokens).
+	decoded, _ := tok.Decode(enc.IDs)
+	fmt.Printf("Decoded:        %q\n\n", decoded)
 
-	// --- Multilingual examples ---
+	// ── Step 4: Multilingual batch → ONNX tensors ──────────────────
 	texts := []string{
+		"Hello, world!",
 		"Привіт, світе!",
 		"这是一个测试",
 		"Bonjour le monde!",
 		"مرحبا بالعالم",
 	}
-	maxLen := 16
-	fmt.Printf("Batch encoding (maxLen=%d):\n\n", maxLen)
-	for _, t := range texts {
-		ids, mask, _ := encodeForBERT(tok, t, maxLen)
-		fmt.Printf("  %q\n    ids:  %v\n    mask: %v\n\n", t, ids, mask)
-	}
-}
 
-// encodeForBERT tokenizes text and returns padded tensors ready for ONNX inference.
-//
-// Returns:
-//   - input_ids:      [CLS] + tokens + [SEP] + [PAD...]  (length = maxLen)
-//   - attention_mask:  1 for real tokens, 0 for padding    (length = maxLen)
-//   - token_type_ids:  all zeros                           (length = maxLen)
-//
-// Tokens are truncated to maxLen-2 to leave room for CLS and SEP.
-func encodeForBERT(tok *sp.Tokenizer, text string, maxLen int) ([]int, []int, []int) {
-	ids, _ := tok.Encode(text)
+	fmt.Printf("=== Batch encoding (maxLen=%d) ===\n\n", maxLen)
+	encodings := tok.EncodeBatchWithOptions(texts, true)
 
-	// Truncate if needed (reserve 2 slots for CLS + SEP).
-	if len(ids) > maxLen-2 {
-		ids = ids[:maxLen-2]
+	for i, e := range encodings {
+		fmt.Printf("  %q\n", texts[i])
+		fmt.Printf("    input_ids:      %v\n", e.IDs)
+		fmt.Printf("    attention_mask: %v\n", e.AttentionMask)
+		fmt.Println()
 	}
 
-	// Wrap with special tokens: [CLS] tokens [SEP]
-	ids = tok.AddSpecialTokens(ids)
-
-	realLen := len(ids)
-	padID := tok.Model().PadID()
-
-	inputIDs := make([]int, maxLen)
-	attentionMask := make([]int, maxLen)
-	tokenTypeIDs := make([]int, maxLen)
-
-	copy(inputIDs, ids)
-	for i := realLen; i < maxLen; i++ {
-		inputIDs[i] = padID
-	}
-	for i := 0; i < realLen; i++ {
-		attentionMask[i] = 1
-	}
-	// tokenTypeIDs stays all zeros.
-
-	return inputIDs, attentionMask, tokenTypeIDs
+	// ── These tensors are ready for ONNX Runtime ───────────────────
+	// Pass to onnxruntime-go:
+	//   session.Run(map[string]*ort.Tensor{
+	//       "input_ids":      ort.NewTensor(enc.IDs),
+	//       "attention_mask": ort.NewTensor(enc.AttentionMask),
+	//       "token_type_ids": ort.NewTensor(enc.TypeIDs),
+	//   })
+	fmt.Println("✓ All tensors ready for ONNX Runtime inference")
 }
