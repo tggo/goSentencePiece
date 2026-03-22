@@ -2,16 +2,19 @@ package sentencepiece
 
 import "encoding/binary"
 
-// ByteTrie is a byte-level trie for vocabulary matching.
-// It supports incremental byte-by-byte traversal matching the
-// Darts-clone traverse() behavior used by the reference.
+// ByteTrie is a byte-level trie used for vocabulary prefix matching during
+// Viterbi tokenization. Each node branches on a single byte value (0-255),
+// and terminal nodes store the vocabulary piece ID. The trie supports
+// incremental byte-by-byte traversal via Traverse, matching the Darts-clone
+// traverse() behavior used by the reference SentencePiece C++ implementation.
 type ByteTrie struct {
 	children [256]*ByteTrie
 	pieceID  int  // -1 if not a terminal node
 	hasValue bool // true if this node represents a piece
 }
 
-// NewByteTrie creates a new empty byte trie.
+// NewByteTrie creates a new empty ByteTrie with no children and pieceID -1
+// (indicating a non-terminal node).
 func NewByteTrie() *ByteTrie {
 	return &ByteTrie{
 		pieceID: -1,
@@ -52,13 +55,17 @@ func (t *ByteTrie) Traverse(b byte) (*ByteTrie, int) {
 	return child, -1
 }
 
-// DartsDoubleArray implements the Darts-clone double-array trie
-// used by SentencePiece's precompiled charsmap.
+// DartsDoubleArray implements the Darts-clone double-array trie data structure
+// used by SentencePiece's precompiled charsmap for Unicode normalization. It
+// stores NFKC and custom character mapping rules in a compact array of uint32
+// units, enabling efficient CommonPrefixSearch over byte sequences.
 type DartsDoubleArray struct {
 	units []uint32
 }
 
-// NewDartsDoubleArray creates a new Darts double-array trie from raw data.
+// NewDartsDoubleArray creates a new DartsDoubleArray from the raw binary trie
+// data extracted from the precompiled charsmap. The data is interpreted as a
+// sequence of little-endian uint32 values representing the double-array units.
 func NewDartsDoubleArray(data []byte) *DartsDoubleArray {
 	numUnits := len(data) / 4
 	units := make([]uint32, numUnits)
@@ -89,14 +96,19 @@ func dartsLabel(unit uint32) uint32 {
 	return unit & ((1 << 31) | 0xFF)
 }
 
-// DartsMatch holds a match result from CommonPrefixSearchBytes.
+// DartsMatch holds a single match result from CommonPrefixSearchBytes. Value
+// is the offset into the normalized replacement table, and Length is the number
+// of input bytes consumed by this match.
 type DartsMatch struct {
 	Value  int
 	Length int
 }
 
-// CommonPrefixSearchBytes finds all prefix matches in the trie for the given bytes.
-// This follows the exact Darts-clone commonPrefixSearch algorithm.
+// CommonPrefixSearchBytes finds all prefix matches in the double-array trie for
+// the given byte slice. It returns matches in order of increasing length,
+// following the exact Darts-clone commonPrefixSearch algorithm. Each match
+// contains the replacement table offset (Value) and the number of matched
+// input bytes (Length). Returns nil if the trie is empty.
 func (d *DartsDoubleArray) CommonPrefixSearchBytes(key []byte) []DartsMatch {
 	var results []DartsMatch
 	n := len(d.units)

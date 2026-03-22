@@ -13,7 +13,7 @@ Pure Go port of the SentencePiece Unigram tokenizer for DeBERTa v3 models.
 
 - Module: `github.com/tggo/goSentencePiece`
 - Min version: Go 1.22
-- Dependencies: stdlib + `google.golang.org/protobuf` + `golang.org/x/text`
+- Dependencies: stdlib + `google.golang.org/protobuf`
 
 ## Commands
 
