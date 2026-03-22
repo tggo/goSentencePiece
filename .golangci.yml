@@ -8,7 +8,7 @@ formatters:
     - gofmt
   exclusions:
     paths:
-      - "**_test.go"
+      - ".*_test\\.go$"
 
 linters:
   enable:
@@ -23,14 +23,10 @@ linters:
   settings:
     gocyclo:
       min-complexity: 15
-    errcheck:
-      exclude-functions:
-        - (github.com/tggo/goSentencePiece.Tokenizer).Encode
-        - (github.com/tggo/goSentencePiece.Tokenizer).Decode
 
   exclusions:
     rules:
-      - path: "_test\\.go"
+      - path: ".*_test\\.go$"
         linters:
           - errcheck
           - gocyclo
