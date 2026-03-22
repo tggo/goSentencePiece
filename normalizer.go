@@ -9,6 +9,9 @@ const metaSpaceRune = '\u2581' // ▁ LOWER ONE EIGHTH BLOCK
 const metaSpace = "▁"
 
 // Normalizer handles text normalization according to the model's NormalizerSpec.
+// It applies the precompiled character map (Darts double-array trie encoding
+// NFKC and custom rules), whitespace deduplication, dummy prefix insertion,
+// and space-to-metaspace escaping.
 type Normalizer struct {
 	addDummyPrefix        bool
 	removeExtraWhitespace bool
@@ -17,7 +20,8 @@ type Normalizer struct {
 	normalized            []byte // Null-terminated strings concatenated.
 }
 
-// NewNormalizer creates a normalizer from model config.
+// NewNormalizer creates a Normalizer from the model's normalization settings,
+// decoding the precompiled charsmap if present.
 func NewNormalizer(m *Model) *Normalizer {
 	n := &Normalizer{
 		addDummyPrefix:        m.addDummyPrefix,
@@ -47,8 +51,10 @@ func (n *Normalizer) decodePrecompiledCharsmap(data []byte) {
 	n.normalized = data[4+trieSize:]
 }
 
-// Normalize applies the full SentencePiece normalization pipeline.
-// This follows the exact algorithm from normalizer.cc.
+// Normalize applies the full SentencePiece normalization pipeline to the input
+// string. It follows the exact algorithm from normalizer.cc: skip leading
+// whitespace, add dummy prefix, apply charsmap replacements, deduplicate
+// whitespace, escape spaces to metaspace, and trim trailing whitespace.
 func (n *Normalizer) Normalize(input string) string {
 	if len(input) == 0 {
 		return ""

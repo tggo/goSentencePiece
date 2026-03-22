@@ -7,7 +7,7 @@ GOLDEN := _testdata/golden/test_cases.jsonl
 PROTO_SRC := proto/sentencepiece_model.proto
 PROTO_GO := proto/sentencepiece_model.pb.go
 
-.PHONY: all venv deps golden proto test bench fuzz clean
+.PHONY: all venv deps golden proto test bench fuzz lint cover ci clean
 
 all: venv deps golden proto test
 
@@ -49,6 +49,19 @@ bench:
 
 fuzz:
 	go test -fuzz=FuzzEncode -fuzztime=60s ./...
+
+# ── Lint / Coverage / CI ────────────────────────────────────
+lint:
+	go vet ./...
+	go install honnef.co/go/tools/cmd/staticcheck@latest
+	staticcheck ./...
+
+cover:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out | tail -1
+
+ci: test lint
+	go build ./...
 
 # ── Cleanup ──────────────────────────────────────────────────
 clean:
